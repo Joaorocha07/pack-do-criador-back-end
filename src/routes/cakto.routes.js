@@ -39,7 +39,14 @@ function isApprovedPurchase(payload) {
   }
 
   const status = normalizeStatus(
-    getByPath(payload, ["status", "sale.status", "order.status", "payment.status"])
+    getByPath(payload, [
+      "status",
+      "data.status",
+      "sale.status",
+      "order.status",
+      "payment.status",
+      "data.payment.status"
+    ])
   );
 
   return ["paid", "approved", "aprovado", "pago", "completed", "complete"].includes(status);
@@ -48,25 +55,45 @@ function isApprovedPurchase(payload) {
 function mapCaktoPayload(payload) {
   return {
     saleId: String(
-      getByPath(payload, ["id", "sale.id", "order.id", "transaction.id", "payment.id"]) ||
+      getByPath(payload, [
+        "id",
+        "data.id",
+        "data.refId",
+        "data.ref_id",
+        "data.orderId",
+        "sale.id",
+        "order.id",
+        "transaction.id",
+        "payment.id"
+      ]) ||
         crypto.randomUUID()
     ),
     status:
-      getByPath(payload, ["status", "sale.status", "order.status", "payment.status"]) ||
+      getByPath(payload, [
+        "status",
+        "data.status",
+        "sale.status",
+        "order.status",
+        "payment.status",
+        "data.payment.status"
+      ]) ||
       "unknown",
     customerName: getByPath(payload, [
+      "data.customer.name",
       "customer.name",
       "client.name",
       "buyer.name",
       "sale.customer.name"
     ]),
     customerEmail: getByPath(payload, [
+      "data.customer.email",
       "customer.email",
       "client.email",
       "buyer.email",
       "sale.customer.email"
     ]),
     productName: getByPath(payload, [
+      "data.product.name",
       "product.name",
       "product.title",
       "sale.product.name",
