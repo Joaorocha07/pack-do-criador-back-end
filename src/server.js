@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const prisma = require("./lib/prisma");
+const adminRoutes = require("./routes/admin.routes");
 const authRoutes = require("./routes/auth.routes");
 const caktoRoutes = require("./routes/cakto.routes");
 
@@ -43,6 +44,7 @@ app.get("/health/db", async (_req, res) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/admin", adminRoutes);
 app.use("/webhooks/cakto", caktoRoutes);
 
 const port = process.env.PORT || 3333;

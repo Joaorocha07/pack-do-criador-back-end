@@ -289,6 +289,14 @@ router.post("/", async (req, res) => {
         password: passwordToSend
       });
 
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          accessEmailSent: true,
+          accessEmailSentAt: new Date()
+        }
+      });
+
       console.log("[cakto:webhook] Email de acesso enviado.", {
         email: maskEmail(email)
       });

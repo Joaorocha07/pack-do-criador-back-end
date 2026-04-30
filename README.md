@@ -56,7 +56,10 @@ DATABASE_URL=sua-url-do-neon
 JWT_SECRET=seu-jwt-secret
 JWT_EXPIRES_IN=7d
 CAKTO_WEBHOOK_SECRET=seu-segredo-do-webhook
+ADMIN_IMPORT_SECRET=seu-segredo-de-importacao
 CAKTO_PRODUCT_NAME=Pack do Criador
+CAKTO_CLIENT_ID=client-id-da-cakto
+CAKTO_CLIENT_SECRET=client-secret-da-cakto
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_SECURE=false
@@ -78,6 +81,73 @@ Se responder `{ "ok": true }`, configure na Cakto:
 ```text
 https://URL-GERADA-PELO-RENDER/webhooks/cakto?secret=SEU_CAKTO_WEBHOOK_SECRET
 ```
+
+## Importar compradores antigos da Cakto
+
+Configure `CAKTO_CLIENT_ID`, `CAKTO_CLIENT_SECRET` e `ADMIN_IMPORT_SECRET` no Render.
+
+Primeiro crie ou promova seu usuario admin:
+
+```http
+POST https://URL-GERADA-PELO-RENDER/admin/bootstrap-admin?secret=SEU_ADMIN_IMPORT_SECRET
+Content-Type: application/json
+```
+
+Body:
+
+```json
+{
+  "name": "Pack do Criador",
+  "email": "packdocriador1@gmail.com",
+  "password": "uma-senha-forte"
+}
+```
+
+Depois faca login em `/auth/login` com esse email e senha. A resposta vai trazer um JWT com `role=ADMIN`.
+
+Use esse token nas rotas administrativas:
+
+```http
+POST https://URL-GERADA-PELO-RENDER/admin/import-cakto-purchases
+Content-Type: application/json
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+Body:
+
+```json
+{
+  "sendEmail": true,
+  "maxPages": 20
+}
+```
+
+O importador busca pedidos pagos do produto definido em `CAKTO_PRODUCT_NAME`, cria usuarios no Neon e envia email de acesso quando `sendEmail` for `true`.
+
+### Listar usuarios importados
+
+```http
+GET https://URL-GERADA-PELO-RENDER/admin/users
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+### Enviar email de acesso manualmente
+
+```http
+POST https://URL-GERADA-PELO-RENDER/admin/send-access-email
+Content-Type: application/json
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+Body:
+
+```json
+{
+  "email": "cliente@email.com"
+}
+```
+
+Esse endpoint gera uma nova senha temporaria, envia o email e marca `accessEmailSent=true`.
 
 ## Rotas
 

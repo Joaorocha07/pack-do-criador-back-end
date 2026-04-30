@@ -43,6 +43,7 @@ router.post("/login", async (req, res) => {
       id: user.id,
       name: user.name,
       email: user.email,
+      role: user.role,
       hasAccess: user.hasAccess,
       temporaryPassword: user.temporaryPassword
     }
@@ -89,6 +90,7 @@ router.get("/me", requireAuth, async (req, res) => {
       id: true,
       name: true,
       email: true,
+      role: true,
       hasAccess: true,
       temporaryPassword: true
     }

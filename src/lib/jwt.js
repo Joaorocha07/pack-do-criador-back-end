@@ -5,6 +5,7 @@ function signAccessToken(user) {
     {
       sub: user.id,
       email: user.email,
+      role: user.role,
       hasAccess: user.hasAccess
     },
     process.env.JWT_SECRET,
