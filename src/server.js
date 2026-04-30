@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const prisma = require("./lib/prisma");
 const authRoutes = require("./routes/auth.routes");
 const caktoRoutes = require("./routes/cakto.routes");
 
@@ -12,6 +13,33 @@ app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
+});
+
+app.get("/health/db", async (_req, res) => {
+  try {
+    const [result] = await prisma.$queryRaw`
+      SELECT
+        to_regclass('public."User"') as "userTable",
+        to_regclass('public."Purchase"') as "purchaseTable"
+    `;
+
+    res.json({
+      ok: true,
+      databaseConnected: true,
+      schemaReady: Boolean(result.userTable && result.purchaseTable),
+      tables: {
+        User: Boolean(result.userTable),
+        Purchase: Boolean(result.purchaseTable)
+      }
+    });
+  } catch (error) {
+    console.error("[health:db] Falha ao verificar banco.", error);
+    res.status(500).json({
+      ok: false,
+      databaseConnected: false,
+      message: error.message
+    });
+  }
 });
 
 app.use("/auth", authRoutes);
