@@ -19,8 +19,8 @@ app.get("/health/db", async (_req, res) => {
   try {
     const [result] = await prisma.$queryRaw`
       SELECT
-        to_regclass('public."User"') as "userTable",
-        to_regclass('public."Purchase"') as "purchaseTable"
+        to_regclass('public."User"')::text as "userTable",
+        to_regclass('public."Purchase"')::text as "purchaseTable"
     `;
 
     res.json({
