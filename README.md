@@ -60,15 +60,37 @@ ADMIN_IMPORT_SECRET=seu-segredo-de-importacao
 CAKTO_PRODUCT_NAME=Pack do Criador
 CAKTO_CLIENT_ID=client-id-da-cakto
 CAKTO_CLIENT_SECRET=client-secret-da-cakto
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=2525
 SMTP_SECURE=false
-SMTP_USER=packdocriador1@gmail.com
-SMTP_PASS=sua-senha-de-app-do-google
-MAIL_FROM=Pack do Criador <packdocriador1@gmail.com>
+SMTP_USER=seu-login-smtp-da-brevo
+SMTP_PASS=sua-smtp-key-da-brevo
+MAIL_FROM=Pack do Criador <email-validado-na-brevo@seudominio.com>
 ```
 
 Nao precisa adicionar `PORT` no Render; ele fornece essa variavel automaticamente.
+
+### Envio de email com Brevo
+
+O backend usa Nodemailer com SMTP, entao nao precisa instalar SDK da Brevo.
+
+No painel da Brevo:
+
+1. Ative emails transacionais/SMTP.
+2. Crie ou copie suas credenciais em **SMTP & API > SMTP**.
+3. Use o **SMTP login** em `SMTP_USER`.
+4. Use uma **SMTP key** em `SMTP_PASS`. Nao use API key nem a senha da conta Brevo.
+5. Valide o remetente ou autentique o dominio. O email de `MAIL_FROM` precisa ser um remetente aceito pela Brevo.
+
+Para Render Free, use a porta `2525`, porque portas SMTP comuns como `587` e `465` podem ser bloqueadas pela hospedagem:
+
+```text
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=2525
+SMTP_SECURE=false
+```
+
+Se voce estiver em uma instancia paga e quiser usar a porta padrao da Brevo, tambem pode usar `SMTP_PORT=587` com `SMTP_SECURE=false`.
 
 Depois que o Render gerar a URL, teste:
 
