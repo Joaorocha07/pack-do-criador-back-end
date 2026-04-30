@@ -1,0 +1,46 @@
+CREATE TABLE IF NOT EXISTS "User" (
+  "id" TEXT NOT NULL,
+  "name" TEXT,
+  "email" TEXT NOT NULL,
+  "passwordHash" TEXT NOT NULL,
+  "hasAccess" BOOLEAN NOT NULL DEFAULT false,
+  "temporaryPassword" BOOLEAN NOT NULL DEFAULT true,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email");
+
+CREATE TABLE IF NOT EXISTS "Purchase" (
+  "id" TEXT NOT NULL,
+  "caktoSaleId" TEXT NOT NULL,
+  "productName" TEXT,
+  "customerName" TEXT,
+  "customerEmail" TEXT NOT NULL,
+  "status" TEXT NOT NULL,
+  "rawPayload" JSONB NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "userId" TEXT,
+
+  CONSTRAINT "Purchase_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "Purchase_caktoSaleId_key" ON "Purchase"("caktoSaleId");
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'Purchase_userId_fkey'
+  ) THEN
+    ALTER TABLE "Purchase"
+    ADD CONSTRAINT "Purchase_userId_fkey"
+    FOREIGN KEY ("userId") REFERENCES "User"("id")
+    ON DELETE SET NULL
+    ON UPDATE CASCADE;
+  END IF;
+END $$;
