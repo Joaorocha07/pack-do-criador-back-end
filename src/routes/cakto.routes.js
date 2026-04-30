@@ -99,6 +99,29 @@ function maskEmail(email) {
   return `${name.slice(0, 2)}***@${domain}`;
 }
 
+function isLikelyTestEvent(payload) {
+  const event = normalizeStatus(
+    getByPath(payload, ["event", "event_name", "eventName", "type", "webhook.event"])
+  );
+
+  const isTestFlag = Boolean(
+    getByPath(payload, ["test", "is_test", "isTest", "webhook.test", "sandbox"])
+  );
+
+  return isTestFlag || event.includes("test") || event.includes("teste");
+}
+
+router.get("/", (req, res) => {
+  if (!hasValidWebhookSecret(req)) {
+    return res.status(401).json({ error: "Webhook nao autorizado." });
+  }
+
+  return res.json({
+    ok: true,
+    message: "Webhook da Cakto ativo. Use POST para eventos reais."
+  });
+});
+
 router.post("/", async (req, res) => {
   console.log("[cakto:webhook] Recebido webhook da Cakto.");
 
@@ -141,6 +164,16 @@ router.post("/", async (req, res) => {
     if (!purchase.customerEmail) {
       console.warn("[cakto:webhook] Erro: email do cliente nao veio no payload.");
       console.warn("[cakto:webhook] Payload recebido:", JSON.stringify(req.body));
+
+      if (isLikelyTestEvent(req.body)) {
+        console.log("[cakto:webhook] Teste recebido sem email. Respondendo 200 para validar URL.");
+        return res.json({
+          ok: true,
+          test: true,
+          warning: "Teste recebido, mas sem email do cliente no payload."
+        });
+      }
+
       return res.status(400).json({ error: "Email do cliente nao encontrado no payload." });
     }
 
