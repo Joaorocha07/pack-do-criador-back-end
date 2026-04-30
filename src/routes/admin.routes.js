@@ -257,29 +257,43 @@ router.post("/send-access-email", async (req, res) => {
     }
   });
 
-  await sendAccessEmail({
-    to: updatedUser.email,
-    name: updatedUser.name,
-    password: temporaryPassword
-  });
+  try {
+    await sendAccessEmail({
+      to: updatedUser.email,
+      name: updatedUser.name,
+      password: temporaryPassword
+    });
 
-  updatedUser = await prisma.user.update({
-    where: { id: updatedUser.id },
-    data: {
-      accessEmailSent: true,
-      accessEmailSentAt: new Date()
-    }
-  });
+    updatedUser = await prisma.user.update({
+      where: { id: updatedUser.id },
+      data: {
+        accessEmailSent: true,
+        accessEmailSentAt: new Date()
+      }
+    });
 
-  console.log("[admin:send-access-email] Email de acesso enviado.", {
-    userId: updatedUser.id,
-    email: updatedUser.email
-  });
+    console.log("[admin:send-access-email] Email de acesso enviado.", {
+      userId: updatedUser.id,
+      email: updatedUser.email
+    });
 
-  return res.json({
-    ok: true,
-    user: userResponse(updatedUser)
-  });
+    return res.json({
+      ok: true,
+      user: userResponse(updatedUser)
+    });
+  } catch (error) {
+    console.error("[admin:send-access-email] Falha ao enviar email.", {
+      userId: updatedUser.id,
+      email: updatedUser.email,
+      message: error.message,
+      stack: error.stack
+    });
+
+    return res.status(500).json({
+      error: "Falha ao enviar email de acesso.",
+      message: error.message
+    });
+  }
 });
 
 module.exports = router;

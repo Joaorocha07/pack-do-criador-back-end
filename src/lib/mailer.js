@@ -1,24 +1,48 @@
 const nodemailer = require("nodemailer");
+const fs = require("fs");
 const path = require("path");
 
 function createTransporter() {
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 587);
+  const secure = process.env.SMTP_SECURE === "true";
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  if (!host || !user || !pass) {
+    throw new Error("Variaveis SMTP nao configuradas: SMTP_HOST, SMTP_USER e SMTP_PASS sao obrigatorios.");
+  }
+
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: process.env.SMTP_SECURE === "true",
+    host,
+    port,
+    secure,
     auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
+      user,
+      pass
     }
   });
 }
 
 async function sendAccessEmail({ to, name, password }) {
+  if (!process.env.MAIL_FROM) {
+    throw new Error("Variavel MAIL_FROM nao configurada.");
+  }
+
   const transporter = createTransporter();
   const appUrl = (process.env.APP_URL || "https://packdocriador.com").replace(/\/$/, "");
   const loginUrl = `${appUrl}/login`;
   const firstName = name ? name.split(" ")[0] : "tudo bem";
   const logoPath = path.resolve(process.cwd(), "android-chrome-512x512.png");
+  const attachments = [];
+
+  if (fs.existsSync(logoPath)) {
+    attachments.push({
+      filename: "android-chrome-512x512.png",
+      path: logoPath,
+      cid: "packdocriador-logo"
+    });
+  }
 
   await transporter.sendMail({
     from: process.env.MAIL_FROM,
@@ -97,13 +121,7 @@ async function sendAccessEmail({ to, name, password }) {
         </body>
       </html>
     `,
-    attachments: [
-      {
-        filename: "android-chrome-512x512.png",
-        path: logoPath,
-        cid: "packdocriador-logo"
-      }
-    ]
+    attachments
   });
 }
 
