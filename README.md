@@ -54,7 +54,7 @@ Em **Environment Variables**, adicione:
 APP_URL=https://URL-GERADA-PELO-RENDER
 DATABASE_URL=sua-url-do-neon
 JWT_SECRET=seu-jwt-secret
-JWT_EXPIRES_IN=7d
+JWT_EXPIRES_IN=3h
 CAKTO_WEBHOOK_SECRET=seu-segredo-do-webhook
 ADMIN_IMPORT_SECRET=seu-segredo-de-importacao
 CAKTO_PRODUCT_NAME=Pack do Criador
@@ -198,6 +198,24 @@ Authorization: Bearer SEU_TOKEN
   "newPassword": "nova-senha-segura"
 }
 ```
+
+### `POST /auth/logout`
+
+Envie o token no header:
+
+```http
+Authorization: Bearer SEU_TOKEN
+```
+
+Resposta:
+
+```json
+{
+  "ok": true
+}
+```
+
+Depois do logout, remova o token salvo no front.
 
 ### `POST /webhooks/cakto`
 
