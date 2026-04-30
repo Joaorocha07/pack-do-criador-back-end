@@ -36,6 +36,49 @@ Copy-Item .env.example .env
 - `SMTP_*`: dados do provedor de email.
 - `APP_URL`: URL do seu frontend/login.
 
+## Deploy no Render
+
+Crie um **Web Service** no Render apontando para este repositorio.
+
+Use estas configuracoes:
+
+```text
+Runtime: Node
+Build Command: npm run render-build
+Start Command: npm start
+```
+
+Em **Environment Variables**, adicione:
+
+```text
+APP_URL=https://URL-GERADA-PELO-RENDER
+DATABASE_URL=sua-url-do-neon
+JWT_SECRET=seu-jwt-secret
+JWT_EXPIRES_IN=7d
+CAKTO_WEBHOOK_SECRET=seu-segredo-do-webhook
+CAKTO_PRODUCT_NAME=Pack do Criador
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=packdocriador1@gmail.com
+SMTP_PASS=sua-senha-de-app-do-google
+MAIL_FROM=Pack do Criador <packdocriador1@gmail.com>
+```
+
+Nao precisa adicionar `PORT` no Render; ele fornece essa variavel automaticamente.
+
+Depois que o Render gerar a URL, teste:
+
+```text
+https://URL-GERADA-PELO-RENDER/health
+```
+
+Se responder `{ "ok": true }`, configure na Cakto:
+
+```text
+https://URL-GERADA-PELO-RENDER/webhooks/cakto?secret=SEU_CAKTO_WEBHOOK_SECRET
+```
+
 ## Rotas
 
 ### `POST /auth/login`
