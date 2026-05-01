@@ -56,3 +56,63 @@ BEGIN
     ON UPDATE CASCADE;
   END IF;
 END $$;
+
+CREATE TABLE IF NOT EXISTS "StickerCategory" (
+  "id" TEXT NOT NULL,
+  "slug" TEXT NOT NULL,
+  "title" TEXT NOT NULL,
+  "description" TEXT,
+  "coverImageId" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT "StickerCategory_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "StickerCategory_slug_key" ON "StickerCategory"("slug");
+
+CREATE TABLE IF NOT EXISTS "StickerImage" (
+  "id" TEXT NOT NULL,
+  "categoryId" TEXT NOT NULL,
+  "originalName" TEXT NOT NULL,
+  "filename" TEXT NOT NULL,
+  "mimeType" TEXT NOT NULL,
+  "size" INTEGER NOT NULL,
+  "storageKey" TEXT NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT "StickerImage_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "StickerImage_storageKey_key" ON "StickerImage"("storageKey");
+CREATE INDEX IF NOT EXISTS "StickerImage_categoryId_idx" ON "StickerImage"("categoryId");
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'StickerImage_categoryId_fkey'
+  ) THEN
+    ALTER TABLE "StickerImage"
+    ADD CONSTRAINT "StickerImage_categoryId_fkey"
+    FOREIGN KEY ("categoryId") REFERENCES "StickerCategory"("id")
+    ON DELETE CASCADE
+    ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'StickerCategory_coverImageId_fkey'
+  ) THEN
+    ALTER TABLE "StickerCategory"
+    ADD CONSTRAINT "StickerCategory_coverImageId_fkey"
+    FOREIGN KEY ("coverImageId") REFERENCES "StickerImage"("id")
+    ON DELETE SET NULL
+    ON UPDATE CASCADE;
+  END IF;
+END $$;

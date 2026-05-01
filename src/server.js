@@ -3,9 +3,12 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const prisma = require("./lib/prisma");
+const adminStickerRoutes = require("./routes/admin-stickers.routes");
 const adminRoutes = require("./routes/admin.routes");
 const authRoutes = require("./routes/auth.routes");
 const caktoRoutes = require("./routes/cakto.routes");
+const stickerRoutes = require("./routes/stickers.routes");
+const { requireAdmin, requireAuth } = require("./middlewares/auth");
 
 const app = express();
 
@@ -21,16 +24,25 @@ app.get("/health/db", async (_req, res) => {
     const [result] = await prisma.$queryRaw`
       SELECT
         to_regclass('public."User"')::text as "userTable",
-        to_regclass('public."Purchase"')::text as "purchaseTable"
+        to_regclass('public."Purchase"')::text as "purchaseTable",
+        to_regclass('public."StickerCategory"')::text as "stickerCategoryTable",
+        to_regclass('public."StickerImage"')::text as "stickerImageTable"
     `;
 
     res.json({
       ok: true,
       databaseConnected: true,
-      schemaReady: Boolean(result.userTable && result.purchaseTable),
+      schemaReady: Boolean(
+        result.userTable &&
+          result.purchaseTable &&
+          result.stickerCategoryTable &&
+          result.stickerImageTable
+      ),
       tables: {
         User: Boolean(result.userTable),
-        Purchase: Boolean(result.purchaseTable)
+        Purchase: Boolean(result.purchaseTable),
+        StickerCategory: Boolean(result.stickerCategoryTable),
+        StickerImage: Boolean(result.stickerImageTable)
       }
     });
   } catch (error) {
@@ -45,6 +57,8 @@ app.get("/health/db", async (_req, res) => {
 
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
+app.use("/admin/stickers", requireAuth, requireAdmin, adminStickerRoutes);
+app.use("/stickers", stickerRoutes);
 app.use("/webhooks/cakto", caktoRoutes);
 
 const port = process.env.PORT || 3333;

@@ -35,6 +35,10 @@ Copy-Item .env.example .env
 - `CAKTO_PRODUCT_NAME`: nome do produto que deve liberar acesso.
 - `SMTP_*`: dados do provedor de email.
 - `APP_URL`: URL do seu frontend/login.
+- `STICKER_STORAGE_DIR`: pasta privada onde as imagens das figurinhas ficam salvas.
+- `STICKER_UPLOAD_MAX_IMAGE_MB`: limite por imagem, padrao `20`.
+- `STICKER_UPLOAD_MAX_FILES`: limite de arquivos por upload, padrao `200`.
+- `STICKER_UPLOAD_MAX_REQUEST_MB`: limite total do multipart, padrao `512`.
 
 ## Deploy no Render
 
@@ -66,6 +70,10 @@ SMTP_SECURE=false
 SMTP_USER=packdocriador1@gmail.com
 SMTP_PASS=sua-senha-de-app-do-google
 MAIL_FROM=Pack do Criador <packdocriador1@gmail.com>
+STICKER_STORAGE_DIR=./.private/stickers
+STICKER_UPLOAD_MAX_IMAGE_MB=20
+STICKER_UPLOAD_MAX_FILES=200
+STICKER_UPLOAD_MAX_REQUEST_MB=512
 ```
 
 Nao precisa adicionar `PORT` no Render; ele fornece essa variavel automaticamente.
@@ -148,6 +156,126 @@ Body:
 ```
 
 Esse endpoint gera uma nova senha temporaria, envia o email e marca `accessEmailSent=true`.
+
+## Figurinhas protegidas
+
+As URLs retornadas apontam para endpoints protegidos. O frontend deve enviar o JWT em todas as chamadas, inclusive ao carregar a imagem:
+
+```http
+Authorization: Bearer SEU_TOKEN
+```
+
+### Cards para o usuario
+
+```http
+GET /stickers/categories
+```
+
+Retorna:
+
+```json
+{
+  "categories": [
+    {
+      "id": "cat_123",
+      "slug": "acessorios",
+      "title": "Acessórios",
+      "description": "Figurinhas para stories de moda e beleza.",
+      "totalStickers": 304,
+      "coverUrl": "/stickers/images/img_abc"
+    }
+  ]
+}
+```
+
+### Imagens de uma categoria
+
+```http
+GET /stickers/categories/:id/images
+```
+
+Retorna:
+
+```json
+{
+  "category": {
+    "id": "cat_123",
+    "title": "Acessórios",
+    "description": "Figurinhas para stories de moda e beleza."
+  },
+  "images": [
+    {
+      "id": "img_abc",
+      "name": "brincos.png",
+      "url": "/stickers/images/img_abc",
+      "downloadUrl": "/stickers/images/img_abc/download"
+    }
+  ]
+}
+```
+
+### Servir imagem ou download
+
+```http
+GET /stickers/images/:id
+GET /stickers/images/:id/download
+```
+
+### Admin: criar categoria
+
+```http
+POST /admin/stickers/categories
+Content-Type: application/json
+```
+
+```json
+{
+  "title": "Acessórios",
+  "description": "Figurinhas para stories de moda e beleza."
+}
+```
+
+### Admin: editar categoria e capa
+
+```http
+PATCH /admin/stickers/categories/:id
+Content-Type: application/json
+```
+
+```json
+{
+  "title": "Acessórios",
+  "description": "Nova descrição",
+  "coverImageId": "uuid-da-imagem"
+}
+```
+
+### Admin: upload multiplo
+
+```http
+POST /admin/stickers/categories/:id/images
+Content-Type: multipart/form-data
+```
+
+Campo do form:
+
+```text
+files: File[]
+```
+
+O backend aceita PNG, JPG, JPEG e WEBP, valida o MIME e a assinatura real do arquivo, salva em storage privado local e nunca expoe `storageKey` na resposta.
+
+### Admin: remover categoria
+
+```http
+DELETE /admin/stickers/categories/:id
+```
+
+Remove a categoria e as imagens dela no banco. Os arquivos locais tambem sao apagados em segundo plano.
+
+## SQL das tabelas de figurinhas no Neon
+
+O arquivo `prisma/init-neon.sql` ja foi atualizado. Se for criar manualmente, rode a parte de `StickerCategory` e `StickerImage` no editor SQL do Neon.
 
 ## Rotas
 
