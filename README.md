@@ -220,6 +220,7 @@ Retorna:
         "disabledReason": null,
         "deviceId": "DEVICE_ID_DO_USUARIO",
         "deviceBoundAt": "2026-05-01T00:00:00.000Z",
+        "deviceBlockedEmailSentAt": null,
         "deviceBound": true,
         "requiresDeviceId": true
       }
@@ -349,7 +350,7 @@ Authorization: Bearer SEU_TOKEN
 x-device-id: DEVICE_ID_DO_APARELHO
 ```
 
-Se o perfil `user` tentar acessar de outro aparelho, a API retorna `403`.
+Se o perfil `user` tentar acessar de outro aparelho, a API retorna `403` e envia um email explicando que a conta so pode ser acessada no aparelho e navegador cadastrados. O reenvio desse aviso respeita `DEVICE_BLOCK_ALERT_INTERVAL_MINUTES`, padrao `60`.
 
 ### Enviar email de acesso manualmente
 

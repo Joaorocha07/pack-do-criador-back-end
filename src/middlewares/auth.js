@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const prisma = require("../lib/prisma");
+const { sendDeviceBlockedAlert } = require("../lib/device-block-alert");
 
 function activeProfileStatus(profile) {
   const disabledUntil = profile?.disabledUntil || null;
@@ -138,6 +139,8 @@ async function requireActiveAccess(req, res, next) {
         });
         user.profile = profile;
       } else if (user.profile.deviceId !== deviceId) {
+        sendDeviceBlockedAlert(user);
+
         return res.status(403).json({
           error: "Acesso bloqueado neste aparelho.",
           message: "Este perfil ja esta vinculado a outro aparelho. Fale com o suporte para resetar o acesso."

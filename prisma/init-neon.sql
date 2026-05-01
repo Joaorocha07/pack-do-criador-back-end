@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS "UserProfile" (
   "disabledReason" TEXT,
   "deviceId" TEXT,
   "deviceBoundAt" TIMESTAMP(3),
+  "deviceBlockedEmailSentAt" TIMESTAMP(3),
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -51,6 +52,9 @@ ADD COLUMN IF NOT EXISTS "deviceId" TEXT;
 
 ALTER TABLE "UserProfile"
 ADD COLUMN IF NOT EXISTS "deviceBoundAt" TIMESTAMP(3);
+
+ALTER TABLE "UserProfile"
+ADD COLUMN IF NOT EXISTS "deviceBlockedEmailSentAt" TIMESTAMP(3);
 
 DO $$
 BEGIN

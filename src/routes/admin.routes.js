@@ -111,6 +111,7 @@ function userResponse(user) {
       disabledReason: status.disabledReason,
       deviceId: profile.deviceId || null,
       deviceBoundAt: profile.deviceBoundAt || null,
+      deviceBlockedEmailSentAt: profile.deviceBlockedEmailSentAt || null,
       deviceBound: Boolean(profile.deviceId),
       requiresDeviceId: shouldEnforceDevice(profile)
     }

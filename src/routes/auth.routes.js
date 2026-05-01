@@ -3,6 +3,7 @@ const { z } = require("zod");
 const prisma = require("../lib/prisma");
 const { comparePassword, hashPassword } = require("../lib/password");
 const { signAccessToken } = require("../lib/jwt");
+const { sendDeviceBlockedAlert } = require("../lib/device-block-alert");
 const { requireAuth } = require("../middlewares/auth");
 
 const router = express.Router();
@@ -72,6 +73,7 @@ function authUserResponse(user) {
       disabledReason: status.disabledReason,
       deviceId: profile.deviceId || null,
       deviceBoundAt: profile.deviceBoundAt || null,
+      deviceBlockedEmailSentAt: profile.deviceBlockedEmailSentAt || null,
       deviceBound: Boolean(profile.deviceId),
       requiresDeviceId: shouldEnforceDevice(profile)
     }
@@ -132,6 +134,8 @@ router.post("/login", async (req, res) => {
       });
       user.profile = profile;
     } else if (profile.deviceId !== deviceId) {
+      sendDeviceBlockedAlert(user);
+
       return res.status(403).json({
         error: "Acesso bloqueado neste aparelho.",
         message: "Este perfil ja esta vinculado a outro aparelho. Fale com o suporte para resetar o acesso."
