@@ -37,7 +37,7 @@ Copy-Item .env.example .env
 - `APP_URL`: URL do seu frontend/login.
 - `STICKER_STORAGE_DIR`: pasta privada onde as imagens das figurinhas ficam salvas.
 - `STICKER_UPLOAD_MAX_IMAGE_MB`: limite por imagem, padrao `20`.
-- `STICKER_UPLOAD_MAX_FILES`: limite de arquivos por upload, padrao `200`.
+- `STICKER_UPLOAD_MAX_FILES`: limite de arquivos por upload, padrao `1000`.
 - `STICKER_UPLOAD_MAX_REQUEST_MB`: limite total do multipart, padrao `512`.
 
 ## Deploy no Render
@@ -72,7 +72,7 @@ SMTP_PASS=sua-smtp-key-da-brevo
 MAIL_FROM=Pack do Criador <email-validado-na-brevo@seudominio.com>
 STICKER_STORAGE_DIR=./.private/stickers
 STICKER_UPLOAD_MAX_IMAGE_MB=20
-STICKER_UPLOAD_MAX_FILES=200
+STICKER_UPLOAD_MAX_FILES=1000
 STICKER_UPLOAD_MAX_REQUEST_MB=512
 ```
 
