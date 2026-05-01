@@ -14,7 +14,7 @@ const router = express.Router();
 router.use(requireAuth, requireActiveAccess);
 
 function categoryCard(category) {
-  const coverImage = category.coverImage || category.images?.[0] || null;
+  const coverImage = category.cover?.image || category.images?.[0] || null;
 
   return {
     id: category.id,
@@ -22,6 +22,7 @@ function categoryCard(category) {
     title: category.title,
     description: category.description,
     totalStickers: category._count?.images || 0,
+    coverImageId: coverImage?.id || null,
     coverUrl: coverImage ? stickerImageUrl(coverImage.id) : null,
     createdAt: category.createdAt,
     updatedAt: category.updatedAt
@@ -45,7 +46,9 @@ router.get("/categories", async (_req, res) => {
   const categories = await prisma.stickerCategory.findMany({
     orderBy: { title: "asc" },
     include: {
-      coverImage: true,
+      cover: {
+        include: { image: true }
+      },
       images: {
         orderBy: { createdAt: "asc" },
         take: 1

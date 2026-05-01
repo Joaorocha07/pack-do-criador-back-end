@@ -26,7 +26,8 @@ app.get("/health/db", async (_req, res) => {
         to_regclass('public."User"')::text as "userTable",
         to_regclass('public."Purchase"')::text as "purchaseTable",
         to_regclass('public."StickerCategory"')::text as "stickerCategoryTable",
-        to_regclass('public."StickerImage"')::text as "stickerImageTable"
+        to_regclass('public."StickerImage"')::text as "stickerImageTable",
+        to_regclass('public."StickerCategoryCover"')::text as "stickerCategoryCoverTable"
     `;
 
     res.json({
@@ -36,13 +37,15 @@ app.get("/health/db", async (_req, res) => {
         result.userTable &&
           result.purchaseTable &&
           result.stickerCategoryTable &&
-          result.stickerImageTable
+          result.stickerImageTable &&
+          result.stickerCategoryCoverTable
       ),
       tables: {
         User: Boolean(result.userTable),
         Purchase: Boolean(result.purchaseTable),
         StickerCategory: Boolean(result.stickerCategoryTable),
-        StickerImage: Boolean(result.stickerImageTable)
+        StickerImage: Boolean(result.stickerImageTable),
+        StickerCategoryCover: Boolean(result.stickerCategoryCoverTable)
       }
     });
   } catch (error) {

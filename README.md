@@ -204,6 +204,7 @@ Retorna:
       "title": "Acessórios",
       "description": "Figurinhas para stories de moda e beleza.",
       "totalStickers": 304,
+      "coverImageId": "img_abc",
       "coverUrl": "/stickers/images/img_abc"
     }
   ]
@@ -257,6 +258,22 @@ Content-Type: application/json
 }
 ```
 
+### Admin: listar categorias
+
+```http
+GET /admin/stickers/categories
+```
+
+Retorna os mesmos cards de `GET /stickers/categories`, com `coverImageId` e `coverUrl`.
+
+### Admin: detalhar categoria
+
+```http
+GET /admin/stickers/categories/:id
+```
+
+Retorna `category` e `images` para a tela de edicao do admin.
+
 ### Admin: editar categoria e capa
 
 ```http
@@ -271,6 +288,27 @@ Content-Type: application/json
   "coverImageId": "uuid-da-imagem"
 }
 ```
+
+`coverImageId` e opcional. Envie `null` para remover a capa manual. Se nao houver capa, o card usa a primeira figurinha da categoria como fallback.
+
+### Admin: definir ou remover capa
+
+```http
+PUT /admin/stickers/categories/:id/cover
+Content-Type: application/json
+```
+
+```json
+{
+  "imageId": "img_abc"
+}
+```
+
+```http
+DELETE /admin/stickers/categories/:id/cover
+```
+
+Ambos retornam `{ "category": { ... } }`.
 
 ### Admin: upload multiplo
 
@@ -287,6 +325,59 @@ files: File[]
 
 O backend aceita PNG, JPG, JPEG e WEBP, valida o MIME e a assinatura real do arquivo, salva em storage privado local e nunca expoe `storageKey` na resposta.
 
+Resposta:
+
+```json
+{
+  "uploaded": 2,
+  "category": {
+    "id": "cat_123",
+    "slug": "acessorios",
+    "title": "Acessorios",
+    "description": "Figurinhas para stories de moda e beleza.",
+    "totalStickers": 304,
+    "coverImageId": "img_abc",
+    "coverUrl": "/stickers/images/img_abc"
+  },
+  "images": [
+    {
+      "id": "img_abc",
+      "categoryId": "cat_123",
+      "name": "brincos.png",
+      "originalName": "brincos.png",
+      "mimeType": "image/png",
+      "size": 123456,
+      "url": "/stickers/images/img_abc",
+      "downloadUrl": "/stickers/images/img_abc/download",
+      "createdAt": "2026-05-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+### Admin: editar nome da figurinha
+
+```http
+PATCH /admin/stickers/images/:id
+Content-Type: application/json
+```
+
+```json
+{
+  "name": "brincos dourados.png"
+}
+```
+
+Retorna `{ "image": { ... } }`.
+
+### Admin: excluir figurinha
+
+```http
+DELETE /admin/stickers/images/:id
+```
+
+Retorna `{ "ok": true, "deletedImageId": "img_abc", "category": { ... } }`.
+
 ### Admin: remover categoria
 
 ```http
@@ -297,7 +388,7 @@ Remove a categoria e as imagens dela no banco. Os arquivos locais tambem sao apa
 
 ## SQL das tabelas de figurinhas no Neon
 
-O arquivo `prisma/init-neon.sql` ja foi atualizado. Se for criar manualmente, rode a parte de `StickerCategory` e `StickerImage` no editor SQL do Neon.
+O arquivo `prisma/init-neon.sql` ja foi atualizado. Se for criar manualmente, rode a parte de `StickerCategory`, `StickerImage` e `StickerCategoryCover` no editor SQL do Neon.
 
 ## Rotas
 

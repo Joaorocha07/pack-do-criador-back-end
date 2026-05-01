@@ -56,7 +56,7 @@ async function uniqueSlug(title, ignoredCategoryId) {
 }
 
 function categoryResponse(category) {
-  const coverImage = category.coverImage || category.images?.[0] || null;
+  const coverImage = category.cover?.image || category.images?.[0] || null;
 
   return {
     id: category.id,
@@ -64,6 +64,7 @@ function categoryResponse(category) {
     title: category.title,
     description: category.description,
     totalStickers: category._count?.images || 0,
+    coverImageId: coverImage?.id || null,
     coverUrl: coverImage ? stickerImageUrl(coverImage.id) : null,
     createdAt: category.createdAt,
     updatedAt: category.updatedAt
@@ -88,7 +89,9 @@ async function findCategory(id) {
   return prisma.stickerCategory.findUnique({
     where: { id },
     include: {
-      coverImage: true,
+      cover: {
+        include: { image: true }
+      },
       images: {
         orderBy: { createdAt: "asc" },
         take: 1
@@ -97,6 +100,65 @@ async function findCategory(id) {
     }
   });
 }
+
+async function setCategoryCover(categoryId, imageId) {
+  if (!imageId) {
+    await prisma.stickerCategoryCover.deleteMany({ where: { categoryId } });
+    return;
+  }
+
+  await prisma.stickerCategoryCover.upsert({
+    where: { categoryId },
+    create: { categoryId, imageId },
+    update: { imageId }
+  });
+}
+
+async function validateCategoryImage(categoryId, imageId) {
+  const image = await prisma.stickerImage.findFirst({
+    where: { id: imageId, categoryId }
+  });
+
+  return image;
+}
+
+router.get("/categories", async (_req, res) => {
+  const categories = await prisma.stickerCategory.findMany({
+    orderBy: { title: "asc" },
+    include: {
+      cover: { include: { image: true } },
+      images: {
+        orderBy: { createdAt: "asc" },
+        take: 1
+      },
+      _count: { select: { images: true } }
+    }
+  });
+
+  return res.json({ categories: categories.map(categoryResponse) });
+});
+
+router.get("/categories/:id", async (req, res) => {
+  const category = await prisma.stickerCategory.findUnique({
+    where: { id: req.params.id },
+    include: {
+      cover: { include: { image: true } },
+      images: {
+        orderBy: { createdAt: "asc" }
+      },
+      _count: { select: { images: true } }
+    }
+  });
+
+  if (!category) {
+    return res.status(404).json({ error: "Categoria nao encontrada." });
+  }
+
+  return res.json({
+    category: categoryResponse(category),
+    images: category.images.map(imageResponse)
+  });
+});
 
 router.post("/categories", async (req, res) => {
   const parsed = categorySchema.safeParse(req.body);
@@ -112,7 +174,9 @@ router.post("/categories", async (req, res) => {
       description: parsed.data.description || null
     },
     include: {
-      coverImage: true,
+      cover: {
+        include: { image: true }
+      },
       images: { take: 1 },
       _count: { select: { images: true } }
     }
@@ -135,12 +199,7 @@ router.patch("/categories/:id", async (req, res) => {
   }
 
   if (parsed.data.coverImageId) {
-    const coverImage = await prisma.stickerImage.findFirst({
-      where: {
-        id: parsed.data.coverImageId,
-        categoryId: category.id
-      }
-    });
+    const coverImage = await validateCategoryImage(category.id, parsed.data.coverImageId);
 
     if (!coverImage) {
       return res.status(400).json({ error: "A capa precisa ser uma imagem desta categoria." });
@@ -154,13 +213,12 @@ router.patch("/categories/:id", async (req, res) => {
       slug: parsed.data.title ? await uniqueSlug(parsed.data.title, category.id) : undefined,
       description: Object.prototype.hasOwnProperty.call(parsed.data, "description")
         ? parsed.data.description || null
-        : undefined,
-      coverImageId: Object.prototype.hasOwnProperty.call(parsed.data, "coverImageId")
-        ? parsed.data.coverImageId
         : undefined
     },
     include: {
-      coverImage: true,
+      cover: {
+        include: { image: true }
+      },
       images: {
         orderBy: { createdAt: "asc" },
         take: 1
@@ -169,7 +227,13 @@ router.patch("/categories/:id", async (req, res) => {
     }
   });
 
-  return res.json({ category: categoryResponse(updated) });
+  if (Object.prototype.hasOwnProperty.call(parsed.data, "coverImageId")) {
+    await setCategoryCover(category.id, parsed.data.coverImageId);
+  }
+
+  const categoryWithCover = await findCategory(category.id);
+
+  return res.json({ category: categoryResponse(categoryWithCover || updated) });
 });
 
 router.delete("/categories/:id", async (req, res) => {
@@ -182,13 +246,7 @@ router.delete("/categories/:id", async (req, res) => {
     return res.status(404).json({ error: "Categoria nao encontrada." });
   }
 
-  await prisma.$transaction([
-    prisma.stickerCategory.update({
-      where: { id: category.id },
-      data: { coverImageId: null }
-    }),
-    prisma.stickerCategory.delete({ where: { id: category.id } })
-  ]);
+  await prisma.stickerCategory.delete({ where: { id: category.id } });
 
   for (const image of category.images) {
     fs.promises.unlink(resolveStoragePath(image.storageKey)).catch(() => {});
@@ -203,7 +261,7 @@ router.post(
   async (req, res) => {
     const category = await prisma.stickerCategory.findUnique({
       where: { id: req.params.id },
-      select: { id: true, coverImageId: true }
+      include: { cover: true }
     });
 
     if (!category) {
@@ -270,11 +328,8 @@ router.post(
       return res.status(500).json({ error: "Falha ao salvar imagens." });
     }
 
-    if (!category.coverImageId && createdImages[0]) {
-      await prisma.stickerCategory.update({
-        where: { id: category.id },
-        data: { coverImageId: createdImages[0].id }
-      });
+    if (!category.cover && createdImages[0]) {
+      await setCategoryCover(category.id, createdImages[0].id);
     }
 
     const updatedCategory = await findCategory(category.id);
@@ -286,5 +341,96 @@ router.post(
     });
   }
 );
+
+router.put("/categories/:id/cover", async (req, res) => {
+  const parsed = z.object({ imageId: z.string().uuid() }).safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Informe imageId valido." });
+  }
+
+  const category = await prisma.stickerCategory.findUnique({ where: { id: req.params.id } });
+
+  if (!category) {
+    return res.status(404).json({ error: "Categoria nao encontrada." });
+  }
+
+  const image = await validateCategoryImage(category.id, parsed.data.imageId);
+
+  if (!image) {
+    return res.status(400).json({ error: "A capa precisa ser uma imagem desta categoria." });
+  }
+
+  await setCategoryCover(category.id, image.id);
+
+  const updatedCategory = await findCategory(category.id);
+
+  return res.json({ category: categoryResponse(updatedCategory) });
+});
+
+router.delete("/categories/:id/cover", async (req, res) => {
+  const category = await prisma.stickerCategory.findUnique({ where: { id: req.params.id } });
+
+  if (!category) {
+    return res.status(404).json({ error: "Categoria nao encontrada." });
+  }
+
+  await setCategoryCover(category.id, null);
+
+  const updatedCategory = await findCategory(category.id);
+
+  return res.json({ category: categoryResponse(updatedCategory) });
+});
+
+router.patch("/images/:id", async (req, res) => {
+  const parsed = z.object({
+    originalName: z.string().trim().min(1).max(255).optional(),
+    name: z.string().trim().min(1).max(255).optional()
+  }).safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Informe um nome valido para a figurinha." });
+  }
+
+  const nextName = parsed.data.originalName || parsed.data.name;
+
+  if (!nextName) {
+    return res.status(400).json({ error: "Informe originalName ou name." });
+  }
+
+  const image = await prisma.stickerImage.update({
+    where: { id: req.params.id },
+    data: { originalName: nextName }
+  }).catch(() => null);
+
+  if (!image) {
+    return res.status(404).json({ error: "Figurinha nao encontrada." });
+  }
+
+  return res.json({ image: imageResponse(image) });
+});
+
+router.delete("/images/:id", async (req, res) => {
+  const image = await prisma.stickerImage.findUnique({
+    where: { id: req.params.id },
+    include: { category: true }
+  });
+
+  if (!image) {
+    return res.status(404).json({ error: "Figurinha nao encontrada." });
+  }
+
+  await prisma.stickerImage.delete({ where: { id: image.id } });
+
+  fs.promises.unlink(resolveStoragePath(image.storageKey)).catch(() => {});
+
+  const category = await findCategory(image.categoryId);
+
+  return res.json({
+    ok: true,
+    deletedImageId: image.id,
+    category: category ? categoryResponse(category) : null
+  });
+});
 
 module.exports = router;

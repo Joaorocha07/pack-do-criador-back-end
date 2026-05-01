@@ -37,28 +37,39 @@ model Purchase {
 }
 
 model StickerCategory {
-  id           String         @id @default(uuid())
-  slug         String         @unique
-  title        String
-  description  String?
-  coverImageId String?
-  coverImage   StickerImage?  @relation("StickerCategoryCover", fields: [coverImageId], references: [id], onDelete: SetNull)
-  images       StickerImage[] @relation("StickerCategoryImages")
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  id          String                @id @default(uuid())
+  slug        String                @unique
+  title       String
+  description String?
+  cover       StickerCategoryCover?
+  images      StickerImage[]        @relation("StickerCategoryImages")
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
 }
 
 model StickerImage {
-  id                String            @id @default(uuid())
-  categoryId        String
-  category          StickerCategory   @relation("StickerCategoryImages", fields: [categoryId], references: [id], onDelete: Cascade)
-  coverForCategories StickerCategory[] @relation("StickerCategoryCover")
-  originalName      String
-  filename          String
-  mimeType          String
-  size              Int
-  storageKey        String            @unique
-  createdAt         DateTime          @default(now())
+  id           String                 @id @default(uuid())
+  categoryId   String
+  category     StickerCategory        @relation("StickerCategoryImages", fields: [categoryId], references: [id], onDelete: Cascade)
+  coverFor     StickerCategoryCover[]
+  originalName String
+  filename     String
+  mimeType     String
+  size         Int
+  storageKey   String                 @unique
+  createdAt    DateTime               @default(now())
 
   @@index([categoryId])
+}
+
+model StickerCategoryCover {
+  id         String          @id @default(uuid())
+  categoryId String          @unique
+  imageId    String
+  category   StickerCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  image      StickerImage    @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@index([imageId])
 }

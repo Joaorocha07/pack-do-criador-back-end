@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 CREATE TABLE IF NOT EXISTS "User" (
   "id" TEXT NOT NULL,
   "name" TEXT,
@@ -62,7 +64,6 @@ CREATE TABLE IF NOT EXISTS "StickerCategory" (
   "slug" TEXT NOT NULL,
   "title" TEXT NOT NULL,
   "description" TEXT,
-  "coverImageId" TEXT,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -87,6 +88,22 @@ CREATE TABLE IF NOT EXISTS "StickerImage" (
 CREATE UNIQUE INDEX IF NOT EXISTS "StickerImage_storageKey_key" ON "StickerImage"("storageKey");
 CREATE INDEX IF NOT EXISTS "StickerImage_categoryId_idx" ON "StickerImage"("categoryId");
 
+CREATE TABLE IF NOT EXISTS "StickerCategoryCover" (
+  "id" TEXT NOT NULL,
+  "categoryId" TEXT NOT NULL,
+  "imageId" TEXT NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT "StickerCategoryCover_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "StickerCategoryCover_categoryId_key"
+ON "StickerCategoryCover"("categoryId");
+
+CREATE INDEX IF NOT EXISTS "StickerCategoryCover_imageId_idx"
+ON "StickerCategoryCover"("imageId");
+
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -107,12 +124,49 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1
     FROM pg_constraint
-    WHERE conname = 'StickerCategory_coverImageId_fkey'
+    WHERE conname = 'StickerCategoryCover_categoryId_fkey'
   ) THEN
-    ALTER TABLE "StickerCategory"
-    ADD CONSTRAINT "StickerCategory_coverImageId_fkey"
-    FOREIGN KEY ("coverImageId") REFERENCES "StickerImage"("id")
-    ON DELETE SET NULL
+    ALTER TABLE "StickerCategoryCover"
+    ADD CONSTRAINT "StickerCategoryCover_categoryId_fkey"
+    FOREIGN KEY ("categoryId") REFERENCES "StickerCategory"("id")
+    ON DELETE CASCADE
     ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'StickerCategoryCover_imageId_fkey'
+  ) THEN
+    ALTER TABLE "StickerCategoryCover"
+    ADD CONSTRAINT "StickerCategoryCover_imageId_fkey"
+    FOREIGN KEY ("imageId") REFERENCES "StickerImage"("id")
+    ON DELETE CASCADE
+    ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'StickerCategory'
+      AND column_name = 'coverImageId'
+  ) THEN
+    INSERT INTO "StickerCategoryCover" ("id", "categoryId", "imageId", "createdAt", "updatedAt")
+    SELECT gen_random_uuid()::text, c."id", c."coverImageId", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM "StickerCategory" c
+    INNER JOIN "StickerImage" i
+      ON i."id" = c."coverImageId"
+      AND i."categoryId" = c."id"
+    WHERE c."coverImageId" IS NOT NULL
+    ON CONFLICT ("categoryId") DO UPDATE
+      SET "imageId" = EXCLUDED."imageId",
+          "updatedAt" = CURRENT_TIMESTAMP;
   END IF;
 END $$;
