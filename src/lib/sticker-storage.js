@@ -12,6 +12,61 @@ function storageRoot() {
   return path.resolve(process.env.STICKER_STORAGE_DIR || path.join(process.cwd(), ".private", "stickers"));
 }
 
+function storageDriver() {
+  return String(process.env.STICKER_STORAGE_DRIVER || "local").trim().toLowerCase();
+}
+
+let r2Client;
+let r2Commands;
+
+function getR2Commands() {
+  if (!r2Commands) {
+    r2Commands = require("@aws-sdk/client-s3");
+  }
+
+  return r2Commands;
+}
+
+function getR2Client() {
+  if (r2Client) {
+    return r2Client;
+  }
+
+  const accountId = process.env.R2_ACCOUNT_ID;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  const endpoint = process.env.R2_ENDPOINT || `https://${accountId}.r2.cloudflarestorage.com`;
+
+  if (!accountId && !process.env.R2_ENDPOINT) {
+    throw new Error("Configure R2_ACCOUNT_ID ou R2_ENDPOINT para usar Cloudflare R2.");
+  }
+
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error("Configure R2_ACCESS_KEY_ID e R2_SECRET_ACCESS_KEY para usar Cloudflare R2.");
+  }
+
+  const { S3Client } = getR2Commands();
+
+  r2Client = new S3Client({
+    region: "auto",
+    endpoint,
+    credentials: {
+      accessKeyId,
+      secretAccessKey
+    }
+  });
+
+  return r2Client;
+}
+
+function r2Bucket() {
+  if (!process.env.R2_BUCKET) {
+    throw new Error("Configure R2_BUCKET para usar Cloudflare R2.");
+  }
+
+  return process.env.R2_BUCKET;
+}
+
 function stickerImageUrl(imageId) {
   return `/stickers/images/${imageId}`;
 }
@@ -70,9 +125,30 @@ function assertAllowedImage(file, maxBytes) {
   return detected;
 }
 
-async function saveStickerFile({ categoryId, originalName, buffer, extension }) {
+async function saveStickerFile({ categoryId, originalName, buffer, extension, mimeType }) {
   const filename = `${crypto.randomUUID()}.${extension}`;
   const storageKey = path.posix.join("categories", categoryId, filename);
+
+  if (storageDriver() === "r2") {
+    const { PutObjectCommand } = getR2Commands();
+
+    await getR2Client().send(
+      new PutObjectCommand({
+        Bucket: r2Bucket(),
+        Key: storageKey,
+        Body: buffer,
+        ContentType: mimeType
+      })
+    );
+
+    return {
+      filename,
+      originalName,
+      storageKey,
+      size: buffer.length
+    };
+  }
+
   const targetDir = path.join(storageRoot(), "categories", categoryId);
   const targetPath = path.join(targetDir, filename);
 
@@ -85,6 +161,59 @@ async function saveStickerFile({ categoryId, originalName, buffer, extension }) 
     storageKey,
     size: buffer.length
   };
+}
+
+async function getStickerFile(storageKey) {
+  if (storageDriver() === "r2") {
+    const { GetObjectCommand } = getR2Commands();
+
+    try {
+      const object = await getR2Client().send(
+        new GetObjectCommand({
+          Bucket: r2Bucket(),
+          Key: storageKey
+        })
+      );
+
+      return {
+        stream: object.Body,
+        contentLength: object.ContentLength
+      };
+    } catch (error) {
+      if (["NoSuchKey", "NotFound"].includes(error.name)) {
+        return null;
+      }
+
+      throw error;
+    }
+  }
+
+  const filePath = resolveStoragePath(storageKey);
+
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+
+  return {
+    stream: fs.createReadStream(filePath),
+    contentLength: fs.statSync(filePath).size
+  };
+}
+
+async function deleteStickerFile(storageKey) {
+  if (storageDriver() === "r2") {
+    const { DeleteObjectCommand } = getR2Commands();
+
+    await getR2Client().send(
+      new DeleteObjectCommand({
+        Bucket: r2Bucket(),
+        Key: storageKey
+      })
+    );
+    return;
+  }
+
+  await fs.promises.unlink(resolveStoragePath(storageKey));
 }
 
 function resolveStoragePath(storageKey) {
@@ -100,6 +229,8 @@ function resolveStoragePath(storageKey) {
 
 module.exports = {
   assertAllowedImage,
+  deleteStickerFile,
+  getStickerFile,
   resolveStoragePath,
   safeContentDisposition,
   saveStickerFile,

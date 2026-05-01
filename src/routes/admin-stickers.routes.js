@@ -1,11 +1,10 @@
-const fs = require("fs");
 const express = require("express");
 const { z } = require("zod");
 const prisma = require("../lib/prisma");
 const { parseMultipartFiles } = require("../lib/multipart-files");
 const {
   assertAllowedImage,
-  resolveStoragePath,
+  deleteStickerFile,
   saveStickerFile,
   stickerDownloadUrl,
   stickerImageUrl
@@ -39,6 +38,8 @@ const effectiveMaxRequestMb = isVercelRuntime
 const MAX_IMAGE_BYTES = effectiveMaxImageMb * 1024 * 1024;
 const MAX_FILES = Number(process.env.STICKER_UPLOAD_MAX_FILES || 1000);
 const MAX_TOTAL_BYTES = effectiveMaxRequestMb * 1024 * 1024;
+const STORAGE_LIMIT_MB = Number(process.env.STICKER_STORAGE_MAX_MB || 0);
+const STORAGE_LIMIT_BYTES = STORAGE_LIMIT_MB > 0 ? STORAGE_LIMIT_MB * 1024 * 1024 : 0;
 
 function slugify(title) {
   return title
@@ -94,6 +95,36 @@ function imageResponse(image) {
     url: stickerImageUrl(image.id),
     downloadUrl: stickerDownloadUrl(image.id),
     createdAt: image.createdAt
+  };
+}
+
+function formatMb(bytes) {
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+}
+
+async function assertStorageLimit(uploadBytes) {
+  if (!STORAGE_LIMIT_BYTES) {
+    return null;
+  }
+
+  const result = await prisma.stickerImage.aggregate({
+    _sum: {
+      size: true
+    }
+  });
+
+  const currentBytes = result._sum.size || 0;
+  const nextBytes = currentBytes + uploadBytes;
+
+  if (nextBytes <= STORAGE_LIMIT_BYTES) {
+    return null;
+  }
+
+  return {
+    currentBytes,
+    uploadBytes,
+    limitBytes: STORAGE_LIMIT_BYTES,
+    message: `Limite de armazenamento atingido. Uso atual: ${formatMb(currentBytes)}. Upload solicitado: ${formatMb(uploadBytes)}. Limite configurado: ${formatMb(STORAGE_LIMIT_BYTES)}.`
   };
 }
 
@@ -283,7 +314,7 @@ router.delete("/categories/:id", async (req, res) => {
   }
 
   for (const image of category.images) {
-    fs.promises.unlink(resolveStoragePath(image.storageKey)).catch(() => {});
+    deleteStickerFile(image.storageKey).catch(() => {});
   }
 
   return res.json({
@@ -325,6 +356,24 @@ router.post(
       return res.status(400).json({ error: error.message });
     }
 
+    const uploadBytes = preparedFiles.reduce(
+      (total, prepared) => total + prepared.file.buffer.length,
+      0
+    );
+    const storageLimitError = await assertStorageLimit(uploadBytes);
+
+    if (storageLimitError) {
+      return res.status(413).json({
+        error: "Limite de armazenamento atingido.",
+        message: storageLimitError.message,
+        storage: {
+          currentBytes: storageLimitError.currentBytes,
+          uploadBytes: storageLimitError.uploadBytes,
+          limitBytes: storageLimitError.limitBytes
+        }
+      });
+    }
+
     const createdImages = [];
     const savedStorageKeys = [];
 
@@ -334,7 +383,8 @@ router.post(
           categoryId: category.id,
           originalName: prepared.file.originalName,
           buffer: prepared.file.buffer,
-          extension: prepared.detected.extension
+          extension: prepared.detected.extension,
+          mimeType: prepared.detected.mimeType
         });
         savedStorageKeys.push(savedFile.storageKey);
 
@@ -359,7 +409,7 @@ router.post(
       }
 
       for (const storageKey of savedStorageKeys) {
-        fs.promises.unlink(resolveStoragePath(storageKey)).catch(() => {});
+        deleteStickerFile(storageKey).catch(() => {});
       }
 
       console.error("[admin:stickers] Falha ao salvar upload.", error);
@@ -479,7 +529,7 @@ router.delete("/images/:id", async (req, res) => {
     });
   }
 
-  fs.promises.unlink(resolveStoragePath(image.storageKey)).catch(() => {});
+  deleteStickerFile(image.storageKey).catch(() => {});
 
   const category = await findCategory(image.categoryId);
 

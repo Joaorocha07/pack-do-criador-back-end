@@ -81,6 +81,39 @@ STICKER_UPLOAD_MAX_REQUEST_MB=512
 
 Nao precisa adicionar `PORT` no Render; ele fornece essa variavel automaticamente.
 
+### Storage com Cloudflare R2
+
+Para nao perder imagens em deploy, restart ou troca de instancia no Render, use R2 em producao.
+
+No painel da Cloudflare:
+
+1. Acesse **R2 Object Storage** em **Armazenamento e banco**.
+2. Crie um bucket, por exemplo `pack-do-criador-stickers`.
+3. Abra **Manage R2 API Tokens**.
+4. Crie um token com permissao de leitura e escrita no bucket.
+5. Copie `Access Key ID`, `Secret Access Key` e o `Account ID`.
+
+No Render, configure:
+
+```text
+STICKER_STORAGE_DRIVER=r2
+R2_ACCOUNT_ID=seu-account-id
+R2_BUCKET=pack-do-criador-stickers
+R2_ACCESS_KEY_ID=sua-access-key-id
+R2_SECRET_ACCESS_KEY=sua-secret-access-key
+STICKER_STORAGE_MAX_MB=9500
+```
+
+O `R2_ENDPOINT` e opcional. Se precisar informar manualmente:
+
+```text
+R2_ENDPOINT=https://SEU_ACCOUNT_ID.r2.cloudflarestorage.com
+```
+
+Depois faca deploy novamente. As imagens enviadas depois dessa configuracao ficam salvas no R2. Registros antigos que apontavam para arquivos locais perdidos precisam ser reenviados.
+
+`STICKER_STORAGE_MAX_MB` trava novos uploads quando a soma das imagens no banco mais o lote enviado passar do limite. Use `9500` para ficar perto de 9.5GB, abaixo do free tier de 10GB do R2. Use `9.5` apenas se quiser testar a trava em 9.5MB.
+
 ### Envio de email com Brevo
 
 O backend usa Nodemailer com SMTP, entao nao precisa instalar SDK da Brevo.

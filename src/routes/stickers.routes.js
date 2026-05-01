@@ -1,9 +1,8 @@
-const fs = require("fs");
 const express = require("express");
 const prisma = require("../lib/prisma");
 const { requireActiveAccess, requireAuth } = require("../middlewares/auth");
 const {
-  resolveStoragePath,
+  getStickerFile,
   safeContentDisposition,
   stickerDownloadUrl,
   stickerImageUrl
@@ -161,9 +160,9 @@ async function sendImage(req, res, disposition) {
     return res.status(404).json({ error: "Imagem nao encontrada." });
   }
 
-  const filePath = resolveStoragePath(image.storageKey);
+  const storedFile = await getStickerFile(image.storageKey);
 
-  if (!fs.existsSync(filePath)) {
+  if (!storedFile) {
     return res.status(404).json({ error: "Arquivo da imagem nao encontrado." });
   }
 
@@ -171,7 +170,11 @@ async function sendImage(req, res, disposition) {
   res.setHeader("Cache-Control", "private, no-store");
   res.setHeader("Content-Disposition", safeContentDisposition(disposition, image.originalName));
 
-  return fs.createReadStream(filePath).pipe(res);
+  if (storedFile.contentLength) {
+    res.setHeader("Content-Length", String(storedFile.contentLength));
+  }
+
+  return storedFile.stream.pipe(res);
 }
 
 router.get("/images/:id/download", async (req, res) => {
