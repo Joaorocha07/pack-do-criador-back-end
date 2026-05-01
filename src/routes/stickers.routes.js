@@ -13,6 +13,19 @@ const router = express.Router();
 
 router.use(requireAuth, requireActiveAccess);
 
+const DEFAULT_IMAGES_LIMIT = 60;
+const MAX_IMAGES_LIMIT = 200;
+
+function parseImagesLimit(value) {
+  const limit = Number.parseInt(value, 10);
+
+  if (!Number.isFinite(limit) || limit <= 0) {
+    return DEFAULT_IMAGES_LIMIT;
+  }
+
+  return Math.min(limit, MAX_IMAGES_LIMIT);
+}
+
 function categoryCard(category) {
   const coverImage = category.cover?.image || category.images?.[0] || null;
 
@@ -50,7 +63,7 @@ router.get("/categories", async (_req, res) => {
         include: { image: true }
       },
       images: {
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         take: 1
       },
       _count: { select: { images: true } }
@@ -61,6 +74,9 @@ router.get("/categories", async (_req, res) => {
 });
 
 router.get("/categories/:id/images", async (req, res) => {
+  const limit = parseImagesLimit(req.query.limit);
+  const cursor = typeof req.query.cursor === "string" ? req.query.cursor : null;
+
   const category = await prisma.stickerCategory.findUnique({
     where: { id: req.params.id },
     select: {
@@ -69,7 +85,14 @@ router.get("/categories/:id/images", async (req, res) => {
       title: true,
       description: true,
       images: {
-        orderBy: { createdAt: "asc" }
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        take: limit + 1,
+        ...(cursor
+          ? {
+              cursor: { id: cursor },
+              skip: 1
+            }
+          : {})
       }
     }
   });
@@ -78,6 +101,10 @@ router.get("/categories/:id/images", async (req, res) => {
     return res.status(404).json({ error: "Categoria nao encontrada." });
   }
 
+  const hasNextPage = category.images.length > limit;
+  const images = hasNextPage ? category.images.slice(0, limit) : category.images;
+  const nextCursor = hasNextPage ? images[images.length - 1]?.id || null : null;
+
   return res.json({
     category: {
       id: category.id,
@@ -85,7 +112,12 @@ router.get("/categories/:id/images", async (req, res) => {
       title: category.title,
       description: category.description
     },
-    images: category.images.map(imageResponse)
+    images: images.map(imageResponse),
+    pagination: {
+      limit,
+      hasNextPage,
+      nextCursor
+    }
   });
 });
 

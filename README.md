@@ -217,7 +217,8 @@ Retorna:
 ### Imagens de uma categoria
 
 ```http
-GET /stickers/categories/:id/images
+GET /stickers/categories/:id/images?limit=60
+GET /stickers/categories/:id/images?limit=60&cursor=img_abc
 ```
 
 Retorna:
@@ -236,9 +237,16 @@ Retorna:
       "url": "/stickers/images/img_abc",
       "downloadUrl": "/stickers/images/img_abc/download"
     }
-  ]
+  ],
+  "pagination": {
+    "limit": 60,
+    "hasNextPage": true,
+    "nextCursor": "img_abc"
+  }
 }
 ```
+
+Use `nextCursor` na proxima chamada para carregar o proximo lote. O limite padrao e 60 imagens por chamada, com maximo de 200.
 
 ### Servir imagem ou download
 
