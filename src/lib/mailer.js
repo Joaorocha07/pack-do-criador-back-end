@@ -222,4 +222,71 @@ async function sendDeviceBlockedEmail({ to, name }) {
   });
 }
 
-module.exports = { sendAccessEmail, sendDeviceBlockedEmail };
+async function sendDeviceResetEmail({ to, name }) {
+  if (!process.env.MAIL_FROM) {
+    throw new Error("Variavel MAIL_FROM nao configurada.");
+  }
+
+  const transporter = createTransporter();
+  const appUrl = (process.env.APP_URL || "https://packdocriador.com").replace(/\/$/, "");
+  const loginUrl = `${appUrl}/login`;
+  const firstName = name ? name.split(" ")[0] : "tudo bem";
+  const attachments = getLogoAttachment();
+
+  await transporter.sendMail({
+    from: process.env.MAIL_FROM,
+    to,
+    subject: "Seu aparelho foi resetado no Pack do Criador",
+    text: [
+      `Ola, ${firstName}!`,
+      "",
+      "O aparelho vinculado a sua conta foi resetado.",
+      "",
+      "Agora voce pode fazer login novamente. Por seguranca, use o mesmo aparelho e o mesmo navegador que deseja manter vinculado a conta.",
+      "",
+      "Depois do proximo acesso, sua conta ficara vinculada a esse aparelho/navegador.",
+      "",
+      `Acesse: ${loginUrl}`
+    ].join("\n"),
+    html: emailShell({
+      title: "Aparelho resetado",
+      preview: "Seu aparelho foi resetado e voce ja pode fazer login novamente.",
+      attachments,
+      content: {
+        header: `
+          <p style="margin:0 0 8px;color:#2563eb;font-size:13px;letter-spacing:3px;text-transform:uppercase;">Aparelho resetado</p>
+          <h1 style="margin:0;color:#172033;font-size:26px;line-height:1.25;">Voce ja pode fazer login novamente</h1>
+        `,
+        body: `
+          <p style="margin:0 0 18px;color:#3a4558;font-size:16px;line-height:1.6;">
+            Ola, ${firstName}! O aparelho vinculado a sua conta foi resetado pelo suporte.
+          </p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:14px;margin:20px 0;">
+            <tr>
+              <td style="padding:20px;">
+                <p style="margin:0;color:#1e3a8a;font-size:15px;line-height:1.6;">
+                  Faça o proximo login no mesmo aparelho e no mesmo navegador que voce deseja manter cadastrado. Depois desse acesso, sua conta ficara vinculada a ele novamente.
+                </p>
+              </td>
+            </tr>
+          </table>
+          <p style="margin:0 0 22px;color:#3a4558;font-size:15px;line-height:1.6;">
+            Se voce trocar de navegador, limpar os dados do site ou entrar por outro aparelho, o acesso pode ser bloqueado de novo por seguranca.
+          </p>
+          <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto 24px;">
+            <tr>
+              <td bgcolor="#111827" style="border-radius:10px;">
+                <a href="${loginUrl}" style="display:inline-block;padding:15px 28px;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;border-radius:10px;">
+                  Fazer login
+                </a>
+              </td>
+            </tr>
+          </table>
+        `
+      }
+    }),
+    attachments
+  });
+}
+
+module.exports = { sendAccessEmail, sendDeviceBlockedEmail, sendDeviceResetEmail };

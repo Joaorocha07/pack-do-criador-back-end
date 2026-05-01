@@ -321,7 +321,7 @@ DELETE https://URL-GERADA-PELO-RENDER/admin/users/USER_ID/device
 Authorization: Bearer SEU_TOKEN_ADMIN
 ```
 
-Retorna `{ "ok": true, "message": "Vinculo de aparelho resetado.", "user": { ... } }`. No proximo login/acesso do perfil `user`, o primeiro `deviceId` enviado vira o aparelho vinculado.
+Retorna `{ "ok": true, "message": "Vinculo de aparelho resetado.", "user": { ... } }`. No proximo login/acesso do perfil `user`, o primeiro `deviceId` enviado vira o aparelho vinculado. A API tambem envia um email avisando que o aparelho foi resetado e que o proximo login deve ser feito no aparelho/navegador que a pessoa quer manter cadastrado.
 
 ### Login com ID do aparelho
 

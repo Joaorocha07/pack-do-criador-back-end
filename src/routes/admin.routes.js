@@ -3,7 +3,7 @@ const { z } = require("zod");
 const prisma = require("../lib/prisma");
 const { listCaktoOrders } = require("../lib/cakto-api");
 const { generateTemporaryPassword, hashPassword } = require("../lib/password");
-const { sendAccessEmail } = require("../lib/mailer");
+const { sendAccessEmail, sendDeviceResetEmail } = require("../lib/mailer");
 const { requireAdmin, requireAuth } = require("../middlewares/auth");
 
 const router = express.Router();
@@ -547,6 +547,16 @@ router.delete("/users/:id/device", async (req, res) => {
       deviceId: null,
       deviceBoundAt: null
     }
+  });
+
+  sendDeviceResetEmail({
+    to: user.email,
+    name: user.name
+  }).catch((error) => {
+    console.error("[admin:device] Falha ao enviar email de reset de aparelho.", {
+      userId: user.id,
+      message: error.message
+    });
   });
 
   return res.json({
