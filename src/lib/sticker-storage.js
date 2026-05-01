@@ -16,6 +16,10 @@ function storageDriver() {
   return String(process.env.STICKER_STORAGE_DRIVER || "local").trim().toLowerCase();
 }
 
+function storageProviderName() {
+  return storageDriver() === "r2" ? "cloudflare-r2" : "local";
+}
+
 let r2Client;
 let r2Commands;
 
@@ -216,6 +220,43 @@ async function deleteStickerFile(storageKey) {
   await fs.promises.unlink(resolveStoragePath(storageKey));
 }
 
+async function getStorageUsageFromProvider() {
+  if (storageDriver() === "r2") {
+    const { ListObjectsV2Command } = getR2Commands();
+    let continuationToken;
+    let totalBytes = 0;
+    let totalObjects = 0;
+
+    do {
+      const result = await getR2Client().send(
+        new ListObjectsV2Command({
+          Bucket: r2Bucket(),
+          ContinuationToken: continuationToken
+        })
+      );
+
+      for (const object of result.Contents || []) {
+        totalBytes += object.Size || 0;
+        totalObjects += 1;
+      }
+
+      continuationToken = result.IsTruncated ? result.NextContinuationToken : null;
+    } while (continuationToken);
+
+    return {
+      source: storageProviderName(),
+      totalBytes,
+      totalObjects
+    };
+  }
+
+  return {
+    source: storageProviderName(),
+    totalBytes: null,
+    totalObjects: null
+  };
+}
+
 function resolveStoragePath(storageKey) {
   const root = storageRoot();
   const resolved = path.resolve(root, storageKey);
@@ -230,7 +271,9 @@ function resolveStoragePath(storageKey) {
 module.exports = {
   assertAllowedImage,
   deleteStickerFile,
+  getStorageUsageFromProvider,
   getStickerFile,
+  storageProviderName,
   resolveStoragePath,
   safeContentDisposition,
   saveStickerFile,

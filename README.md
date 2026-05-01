@@ -323,7 +323,7 @@ GET /admin/stickers/storage-usage
 Authorization: Bearer SEU_TOKEN_ADMIN
 ```
 
-Retorna o total usado pelas imagens registradas no banco e o limite configurado em `STICKER_STORAGE_MAX_MB`.
+Retorna o total usado no storage ativo e o limite configurado em `STICKER_STORAGE_MAX_MB`. Quando `STICKER_STORAGE_DRIVER=r2`, o uso vem do bucket Cloudflare R2; `databaseBytes` fica apenas como referencia dos metadados salvos no Neon.
 
 ### Admin: detalhar categoria
 

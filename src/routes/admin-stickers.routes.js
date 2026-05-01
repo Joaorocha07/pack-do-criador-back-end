@@ -5,7 +5,9 @@ const { parseMultipartFiles } = require("../lib/multipart-files");
 const {
   assertAllowedImage,
   deleteStickerFile,
+  getStorageUsageFromProvider,
   saveStickerFile,
+  storageProviderName,
   stickerDownloadUrl,
   stickerImageUrl
 } = require("../lib/sticker-storage");
@@ -102,23 +104,39 @@ function formatMb(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
-async function getStorageUsage(uploadBytes = 0) {
+async function getStorageUsageFromDatabase() {
   const result = await prisma.stickerImage.aggregate({
     _sum: {
       size: true
     }
   });
 
-  const currentBytes = result._sum.size || 0;
+  return result._sum.size || 0;
+}
+
+async function getStorageUsage(uploadBytes = 0) {
+  const databaseBytes = await getStorageUsageFromDatabase();
+  const providerUsage = await getStorageUsageFromProvider();
+  const currentBytes =
+    typeof providerUsage.totalBytes === "number" ? providerUsage.totalBytes : databaseBytes;
   const nextBytes = currentBytes + uploadBytes;
   const percentUsed = STORAGE_LIMIT_BYTES
     ? Number(((currentBytes / STORAGE_LIMIT_BYTES) * 100).toFixed(2))
     : null;
 
   return {
+    label: "Uso do Cloudflare R2",
+    description: STORAGE_LIMIT_BYTES
+      ? `Usado ${formatMb(currentBytes)} de ${formatMb(STORAGE_LIMIT_BYTES)}.`
+      : `Usado ${formatMb(currentBytes)}. Nenhuma trava de storage configurada.`,
     currentBytes,
     currentMb: Number((currentBytes / 1024 / 1024).toFixed(2)),
     currentFormatted: formatMb(currentBytes),
+    source: providerUsage.source,
+    provider: storageProviderName(),
+    databaseBytes,
+    databaseFormatted: formatMb(databaseBytes),
+    objectCount: providerUsage.totalObjects,
     limitBytes: STORAGE_LIMIT_BYTES || null,
     limitMb: STORAGE_LIMIT_MB || null,
     limitFormatted: STORAGE_LIMIT_BYTES ? formatMb(STORAGE_LIMIT_BYTES) : null,
@@ -131,7 +149,8 @@ async function getStorageUsage(uploadBytes = 0) {
     nextBytes,
     isLimitEnabled: Boolean(STORAGE_LIMIT_BYTES),
     isOverLimit: Boolean(STORAGE_LIMIT_BYTES && currentBytes >= STORAGE_LIMIT_BYTES),
-    wouldExceedLimit: Boolean(STORAGE_LIMIT_BYTES && nextBytes > STORAGE_LIMIT_BYTES)
+    wouldExceedLimit: Boolean(STORAGE_LIMIT_BYTES && nextBytes > STORAGE_LIMIT_BYTES),
+    shouldBlockUploads: Boolean(STORAGE_LIMIT_BYTES && currentBytes >= STORAGE_LIMIT_BYTES)
   };
 }
 
