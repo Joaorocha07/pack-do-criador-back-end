@@ -83,6 +83,10 @@ router.post("/change-password", requireAuth, async (req, res) => {
   return res.json({ ok: true });
 });
 
+router.post("/logout", requireAuth, (_req, res) => {
+  return res.json({ ok: true });
+});
+
 router.get("/me", requireAuth, async (req, res) => {
   const user = await prisma.user.findUnique({
     where: { id: req.user.sub },
