@@ -218,6 +218,8 @@ Retorna:
 
 ```http
 GET /stickers/categories/:id/images?limit=60
+GET /stickers/categories/:id/images?page=2&limit=60
+GET /stickers/categories/:id/images?offset=60&limit=60
 GET /stickers/categories/:id/images?limit=60&cursor=img_abc
 ```
 
@@ -240,13 +242,17 @@ Retorna:
   ],
   "pagination": {
     "limit": 60,
+    "page": 1,
+    "offset": 0,
     "hasNextPage": true,
-    "nextCursor": "img_abc"
+    "nextCursor": "img_abc",
+    "nextPage": 2,
+    "nextOffset": 60
   }
 }
 ```
 
-Use `nextCursor` na proxima chamada para carregar o proximo lote. O limite padrao e 60 imagens por chamada, com maximo de 200.
+Use `nextPage`, `nextOffset` ou `nextCursor` na proxima chamada para carregar o proximo lote. O limite padrao e 60 imagens por chamada, com maximo de 200.
 
 ### Servir imagem ou download
 

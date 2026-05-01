@@ -26,6 +26,28 @@ function parseImagesLimit(value) {
   return Math.min(limit, MAX_IMAGES_LIMIT);
 }
 
+function parsePositiveInteger(value, defaultValue) {
+  const number = Number.parseInt(value, 10);
+
+  if (!Number.isFinite(number) || number < 1) {
+    return defaultValue;
+  }
+
+  return number;
+}
+
+function parseOffset(value, page, limit) {
+  if (value !== undefined) {
+    const offset = Number.parseInt(value, 10);
+
+    if (Number.isFinite(offset) && offset >= 0) {
+      return offset;
+    }
+  }
+
+  return (page - 1) * limit;
+}
+
 function categoryCard(category) {
   const coverImage = category.cover?.image || category.images?.[0] || null;
 
@@ -75,7 +97,17 @@ router.get("/categories", async (_req, res) => {
 
 router.get("/categories/:id/images", async (req, res) => {
   const limit = parseImagesLimit(req.query.limit);
+  const page = parsePositiveInteger(req.query.page, 1);
+  const offset = parseOffset(req.query.offset, page, limit);
   const cursor = typeof req.query.cursor === "string" ? req.query.cursor : null;
+  const paginationQuery = cursor
+    ? {
+        cursor: { id: cursor },
+        skip: 1
+      }
+    : {
+        skip: offset
+      };
 
   const category = await prisma.stickerCategory.findUnique({
     where: { id: req.params.id },
@@ -87,12 +119,7 @@ router.get("/categories/:id/images", async (req, res) => {
       images: {
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         take: limit + 1,
-        ...(cursor
-          ? {
-              cursor: { id: cursor },
-              skip: 1
-            }
-          : {})
+        ...paginationQuery
       }
     }
   });
@@ -115,8 +142,12 @@ router.get("/categories/:id/images", async (req, res) => {
     images: images.map(imageResponse),
     pagination: {
       limit,
+      page: cursor ? null : page,
+      offset: cursor ? null : offset,
       hasNextPage,
-      nextCursor
+      nextCursor,
+      nextPage: !cursor && hasNextPage ? page + 1 : null,
+      nextOffset: !cursor && hasNextPage ? offset + images.length : null
     }
   });
 });
