@@ -40,6 +40,9 @@ Copy-Item .env.example .env
 - `STICKER_UPLOAD_MAX_FILES`: limite de arquivos por upload, padrao `1000`.
 - `STICKER_UPLOAD_MAX_REQUEST_MB`: limite total do multipart, padrao `512`.
 
+> Na Vercel, Functions tem limite de payload de 4.5MB por request. Se este backend estiver rodando na Vercel, configure `STICKER_UPLOAD_MAX_IMAGE_MB=4` e `STICKER_UPLOAD_MAX_REQUEST_MB=4`, ou envie as figurinhas em lotes menores pelo frontend. Requests maiores sao barrados pela propria Vercel antes de chegar no Express.
+> Para figurinhas protegidas em producao, prefira uma hospedagem com disco persistente ou um storage externo. O `STICKER_STORAGE_DIR` local nao e uma boa base duravel para arquivos enviados em Functions serverless.
+
 ## Deploy no Render
 
 Crie um **Web Service** no Render apontando para este repositorio.
@@ -324,6 +327,8 @@ files: File[]
 ```
 
 O backend aceita PNG, JPG, JPEG e WEBP, valida o MIME e a assinatura real do arquivo, salva em storage privado local e nunca expoe `storageKey` na resposta.
+
+Se o backend estiver hospedado na Vercel, cada chamada deste endpoint precisa ficar abaixo de 4.5MB no total. Para uploads grandes, envie uma imagem por request ou divida em lotes pequenos; em hospedagens como Render, o limite pode ser controlado por `STICKER_UPLOAD_MAX_REQUEST_MB`.
 
 Resposta:
 

@@ -101,7 +101,10 @@ function parseMultipartFiles({ fieldName = "files", maxTotalBytes }) {
     req.on("end", () => {
       try {
         if (tooLarge) {
-          return res.status(413).json({ error: "Upload excede o limite total permitido." });
+          const maxMb = Math.floor(maxTotalBytes / 1024 / 1024);
+          return res.status(413).json({
+            error: `Upload excede o limite total permitido de ${maxMb}MB. Envie menos arquivos por vez.`
+          });
         }
 
         const files = [];

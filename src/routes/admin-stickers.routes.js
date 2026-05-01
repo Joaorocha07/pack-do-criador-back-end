@@ -24,9 +24,21 @@ const categoryPatchSchema = z.object({
   coverImageId: z.string().uuid().optional().nullable()
 });
 
-const MAX_IMAGE_BYTES = Number(process.env.STICKER_UPLOAD_MAX_IMAGE_MB || 20) * 1024 * 1024;
+const isVercelRuntime = Boolean(process.env.VERCEL);
+const vercelRequestLimitMb = 4;
+
+const configuredMaxImageMb = Number(process.env.STICKER_UPLOAD_MAX_IMAGE_MB || 20);
+const configuredMaxRequestMb = Number(process.env.STICKER_UPLOAD_MAX_REQUEST_MB || 512);
+const effectiveMaxImageMb = isVercelRuntime
+  ? Math.min(configuredMaxImageMb, vercelRequestLimitMb)
+  : configuredMaxImageMb;
+const effectiveMaxRequestMb = isVercelRuntime
+  ? Math.min(configuredMaxRequestMb, vercelRequestLimitMb)
+  : configuredMaxRequestMb;
+
+const MAX_IMAGE_BYTES = effectiveMaxImageMb * 1024 * 1024;
 const MAX_FILES = Number(process.env.STICKER_UPLOAD_MAX_FILES || 1000);
-const MAX_TOTAL_BYTES = Number(process.env.STICKER_UPLOAD_MAX_REQUEST_MB || 512) * 1024 * 1024;
+const MAX_TOTAL_BYTES = effectiveMaxRequestMb * 1024 * 1024;
 
 function slugify(title) {
   return title
