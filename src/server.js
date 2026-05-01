@@ -1,8 +1,11 @@
 require("dotenv").config();
+require("./lib/express-async-errors");
 
 const express = require("express");
 const cors = require("cors");
 const prisma = require("./lib/prisma");
+const { connectPrisma } = require("./lib/prisma");
+const { logError, serializeError } = require("./lib/error-logging");
 const adminStickerRoutes = require("./routes/admin-stickers.routes");
 const adminRoutes = require("./routes/admin.routes");
 const authRoutes = require("./routes/auth.routes");
@@ -49,7 +52,7 @@ app.get("/health/db", async (_req, res) => {
       }
     });
   } catch (error) {
-    console.error("[health:db] Falha ao verificar banco.", error);
+    logError("[health:db] Falha ao verificar banco.", error);
     res.status(500).json({
       ok: false,
       databaseConnected: false,
@@ -64,8 +67,57 @@ app.use("/admin/stickers", requireAuth, requireAdmin, adminStickerRoutes);
 app.use("/stickers", stickerRoutes);
 app.use("/webhooks/cakto", caktoRoutes);
 
+app.use((error, req, res, next) => {
+  logError("[http] Erro nao tratado na rota.", error, {
+    method: req.method,
+    path: req.originalUrl
+  });
+
+  if (res.headersSent) {
+    return next(error);
+  }
+
+  const status = error.status || error.statusCode || 500;
+
+  return res.status(status).json({
+    error: status >= 500 ? "Erro interno do servidor." : error.message,
+    message: process.env.NODE_ENV === "production" ? undefined : error.message
+  });
+});
+
 const port = process.env.PORT || 3333;
 
-app.listen(port, () => {
-  console.log(`API rodando na porta ${port}`);
+async function startServer() {
+  try {
+    await connectPrisma();
+
+    const server = app.listen(port, () => {
+      console.log(`API rodando na porta ${port}`);
+    });
+
+    async function shutdown(signal) {
+      console.log(`[server] Encerrando por ${signal}.`);
+      server.close(async () => {
+        await prisma.$disconnect();
+        process.exit(0);
+      });
+    }
+
+    process.on("SIGTERM", () => shutdown("SIGTERM"));
+    process.on("SIGINT", () => shutdown("SIGINT"));
+  } catch (error) {
+    logError("[server] Nao foi possivel iniciar a API.", error);
+    process.exit(1);
+  }
+}
+
+process.on("unhandledRejection", (reason) => {
+  console.error("[process] Promise rejeitada sem tratamento.", serializeError(reason));
 });
+
+process.on("uncaughtException", (error) => {
+  logError("[process] Excecao nao capturada.", error);
+  process.exit(1);
+});
+
+startServer();

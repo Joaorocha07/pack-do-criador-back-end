@@ -330,6 +330,80 @@ O backend aceita PNG, JPG, JPEG e WEBP, valida o MIME e a assinatura real do arq
 
 Se o backend estiver hospedado na Vercel, cada chamada deste endpoint precisa ficar abaixo de 4.5MB no total. Para uploads grandes, envie uma imagem por request ou divida em lotes pequenos; em hospedagens como Render, o limite pode ser controlado por `STICKER_UPLOAD_MAX_REQUEST_MB`.
 
+Exemplo de envio no frontend:
+
+```js
+async function uploadStickerBatch({ apiUrl, categoryId, files, token }) {
+  const formData = new FormData();
+
+  for (const file of files) {
+    formData.append("files", file, file.name);
+  }
+
+  const response = await fetch(`${apiUrl}/admin/stickers/categories/${categoryId}/images`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: formData
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.error || "Nao foi possivel enviar a figurinha.");
+  }
+
+  return data;
+}
+```
+
+Nao defina `Content-Type` manualmente nesse `fetch`; o navegador precisa gerar o `multipart/form-data` com `boundary`. Tambem nao envie arquivo como base64 ou JSON.
+
+Para Vercel, divida os arquivos em lotes pequenos antes de chamar o endpoint:
+
+```js
+const VERCEL_SAFE_UPLOAD_BYTES = Math.floor(3.8 * 1024 * 1024);
+
+function splitFilesForVercel(files, maxBytes = VERCEL_SAFE_UPLOAD_BYTES) {
+  const batches = [];
+  let currentBatch = [];
+  let currentSize = 0;
+
+  for (const file of files) {
+    if (file.size >= maxBytes) {
+      throw new Error(`O arquivo ${file.name} tem mais de 3.8MB. Comprima ou redimensione antes de enviar.`);
+    }
+
+    if (currentBatch.length && currentSize + file.size > maxBytes) {
+      batches.push(currentBatch);
+      currentBatch = [];
+      currentSize = 0;
+    }
+
+    currentBatch.push(file);
+    currentSize += file.size;
+  }
+
+  if (currentBatch.length) {
+    batches.push(currentBatch);
+  }
+
+  return batches;
+}
+
+async function uploadStickers({ apiUrl, categoryId, files, token }) {
+  const batches = splitFilesForVercel(Array.from(files));
+  const results = [];
+
+  for (const batch of batches) {
+    results.push(await uploadStickerBatch({ apiUrl, categoryId, files: batch, token }));
+  }
+
+  return results;
+}
+```
+
 Resposta:
 
 ```json
