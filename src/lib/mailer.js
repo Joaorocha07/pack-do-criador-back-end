@@ -82,6 +82,10 @@ function getLogoAttachment() {
   ];
 }
 
+function supportEmail() {
+  return process.env.SUPPORT_EMAIL || "packdocriador1@gmail.com";
+}
+
 async function sendAccessEmail({ to, name, password }) {
   if (!process.env.MAIL_FROM) {
     throw new Error("Variavel MAIL_FROM nao configurada.");
@@ -166,6 +170,20 @@ async function sendDeviceBlockedEmail({ to, name }) {
   const loginUrl = `${appUrl}/login`;
   const firstName = name ? name.split(" ")[0] : "tudo bem";
   const attachments = getLogoAttachment();
+  const resetEmail = supportEmail();
+  const resetSubject = encodeURIComponent("Solicitar reset de aparelho");
+  const resetBody = encodeURIComponent(
+    [
+      "Ola, suporte do Pack do Criador.",
+      "",
+      "Preciso resetar o aparelho vinculado a minha conta.",
+      "",
+      `Email da conta: ${to}`,
+      "",
+      "Motivo:"
+    ].join("\n")
+  );
+  const resetMailto = `mailto:${resetEmail}?subject=${resetSubject}&body=${resetBody}`;
 
   await transporter.sendMail({
     from: process.env.MAIL_FROM,
@@ -177,7 +195,7 @@ async function sendDeviceBlockedEmail({ to, name }) {
       "Detectamos uma tentativa de acesso ao Pack do Criador em um aparelho ou navegador diferente do cadastrado.",
       "",
       "Por seguranca, sua conta pode ser acessada apenas no aparelho e no navegador usados no primeiro acesso.",
-      "Se voce trocou de aparelho, limpou os dados do navegador ou precisa liberar um novo acesso, fale com o suporte.",
+      `Se voce trocou de aparelho, limpou os dados do navegador ou precisa liberar um novo acesso, envie uma mensagem para ${resetEmail}.`,
       "",
       `Area de membros: ${loginUrl}`
     ].join("\n"),
@@ -204,17 +222,22 @@ async function sendDeviceBlockedEmail({ to, name }) {
             </tr>
           </table>
           <p style="margin:0 0 22px;color:#3a4558;font-size:15px;line-height:1.6;">
-            Se voce trocou de aparelho, reinstalou o navegador, limpou os dados do site ou acredita que isso foi um engano, fale com o suporte para resetarmos o aparelho vinculado.
+            Se voce trocou de aparelho, reinstalou o navegador, limpou os dados do site ou acredita que isso foi um engano, envie uma mensagem para
+            <a href="${resetMailto}" style="color:#2563eb;font-weight:700;text-decoration:none;">${resetEmail}</a>
+            pedindo o reset do aparelho vinculado.
           </p>
           <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto 24px;">
             <tr>
               <td bgcolor="#111827" style="border-radius:10px;">
-                <a href="${loginUrl}" style="display:inline-block;padding:15px 28px;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;border-radius:10px;">
-                  Voltar para a area de membros
+                <a href="${resetMailto}" style="display:inline-block;padding:15px 28px;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;border-radius:10px;">
+                  Pedir reset do aparelho
                 </a>
               </td>
             </tr>
           </table>
+          <p style="margin:0;color:#697386;font-size:13px;line-height:1.5;text-align:center;">
+            Ou copie e envie para: <a href="${resetMailto}" style="color:#2563eb;">${resetEmail}</a>
+          </p>
         `
       }
     }),
@@ -232,6 +255,7 @@ async function sendDeviceResetEmail({ to, name }) {
   const loginUrl = `${appUrl}/login`;
   const firstName = name ? name.split(" ")[0] : "tudo bem";
   const attachments = getLogoAttachment();
+  const resetEmail = supportEmail();
 
   await transporter.sendMail({
     from: process.env.MAIL_FROM,
@@ -271,7 +295,8 @@ async function sendDeviceResetEmail({ to, name }) {
             </tr>
           </table>
           <p style="margin:0 0 22px;color:#3a4558;font-size:15px;line-height:1.6;">
-            Se voce trocar de navegador, limpar os dados do site ou entrar por outro aparelho, o acesso pode ser bloqueado de novo por seguranca.
+            Se voce trocar de navegador, limpar os dados do site ou entrar por outro aparelho, o acesso pode ser bloqueado de novo por seguranca. Se precisar de ajuda, envie uma mensagem para
+            <a href="mailto:${resetEmail}" style="color:#2563eb;font-weight:700;text-decoration:none;">${resetEmail}</a>.
           </p>
           <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto 24px;">
             <tr>

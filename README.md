@@ -350,7 +350,7 @@ Authorization: Bearer SEU_TOKEN
 x-device-id: DEVICE_ID_DO_APARELHO
 ```
 
-Se o perfil `user` tentar acessar de outro aparelho, a API retorna `403` e envia um email explicando que a conta so pode ser acessada no aparelho e navegador cadastrados. O reenvio desse aviso respeita `DEVICE_BLOCK_ALERT_INTERVAL_MINUTES`, padrao `60`.
+Se o perfil `user` tentar acessar de outro aparelho, a API retorna `403` e envia um email explicando que a conta so pode ser acessada no aparelho e navegador cadastrados. O email orienta a pedir reset em `SUPPORT_EMAIL`, por padrao `packdocriador1@gmail.com`. O reenvio desse aviso respeita `DEVICE_BLOCK_ALERT_INTERVAL_MINUTES`, padrao `60`.
 
 ### Enviar email de acesso manualmente
 
