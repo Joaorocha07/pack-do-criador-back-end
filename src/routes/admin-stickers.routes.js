@@ -246,13 +246,39 @@ router.delete("/categories/:id", async (req, res) => {
     return res.status(404).json({ error: "Categoria nao encontrada." });
   }
 
-  await prisma.stickerCategory.delete({ where: { id: category.id } });
+  try {
+    await prisma.$transaction([
+      prisma.stickerCategoryCover.deleteMany({
+        where: { categoryId: category.id }
+      }),
+      prisma.stickerImage.deleteMany({
+        where: { categoryId: category.id }
+      }),
+      prisma.stickerCategory.delete({
+        where: { id: category.id }
+      })
+    ]);
+  } catch (error) {
+    console.error("[admin:stickers] Falha ao excluir categoria.", {
+      categoryId: category.id,
+      message: error.message
+    });
+
+    return res.status(500).json({
+      error: "Falha ao excluir categoria.",
+      message: error.message
+    });
+  }
 
   for (const image of category.images) {
     fs.promises.unlink(resolveStoragePath(image.storageKey)).catch(() => {});
   }
 
-  return res.json({ ok: true });
+  return res.json({
+    ok: true,
+    deletedCategoryId: category.id,
+    deletedImages: category.images.length
+  });
 });
 
 router.post(
@@ -420,7 +446,26 @@ router.delete("/images/:id", async (req, res) => {
     return res.status(404).json({ error: "Figurinha nao encontrada." });
   }
 
-  await prisma.stickerImage.delete({ where: { id: image.id } });
+  try {
+    await prisma.$transaction([
+      prisma.stickerCategoryCover.deleteMany({
+        where: { imageId: image.id }
+      }),
+      prisma.stickerImage.delete({
+        where: { id: image.id }
+      })
+    ]);
+  } catch (error) {
+    console.error("[admin:stickers] Falha ao excluir figurinha.", {
+      imageId: image.id,
+      message: error.message
+    });
+
+    return res.status(500).json({
+      error: "Falha ao excluir figurinha.",
+      message: error.message
+    });
+  }
 
   fs.promises.unlink(resolveStoragePath(image.storageKey)).catch(() => {});
 
