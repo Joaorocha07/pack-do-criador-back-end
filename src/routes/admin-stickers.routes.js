@@ -102,11 +102,7 @@ function formatMb(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
-async function assertStorageLimit(uploadBytes) {
-  if (!STORAGE_LIMIT_BYTES) {
-    return null;
-  }
-
+async function getStorageUsage(uploadBytes = 0) {
   const result = await prisma.stickerImage.aggregate({
     _sum: {
       size: true
@@ -115,16 +111,46 @@ async function assertStorageLimit(uploadBytes) {
 
   const currentBytes = result._sum.size || 0;
   const nextBytes = currentBytes + uploadBytes;
+  const percentUsed = STORAGE_LIMIT_BYTES
+    ? Number(((currentBytes / STORAGE_LIMIT_BYTES) * 100).toFixed(2))
+    : null;
 
-  if (nextBytes <= STORAGE_LIMIT_BYTES) {
+  return {
+    currentBytes,
+    currentMb: Number((currentBytes / 1024 / 1024).toFixed(2)),
+    currentFormatted: formatMb(currentBytes),
+    limitBytes: STORAGE_LIMIT_BYTES || null,
+    limitMb: STORAGE_LIMIT_MB || null,
+    limitFormatted: STORAGE_LIMIT_BYTES ? formatMb(STORAGE_LIMIT_BYTES) : null,
+    percentUsed,
+    remainingBytes: STORAGE_LIMIT_BYTES ? Math.max(STORAGE_LIMIT_BYTES - currentBytes, 0) : null,
+    remainingMb: STORAGE_LIMIT_BYTES
+      ? Number((Math.max(STORAGE_LIMIT_BYTES - currentBytes, 0) / 1024 / 1024).toFixed(2))
+      : null,
+    uploadBytes,
+    nextBytes,
+    isLimitEnabled: Boolean(STORAGE_LIMIT_BYTES),
+    isOverLimit: Boolean(STORAGE_LIMIT_BYTES && currentBytes >= STORAGE_LIMIT_BYTES),
+    wouldExceedLimit: Boolean(STORAGE_LIMIT_BYTES && nextBytes > STORAGE_LIMIT_BYTES)
+  };
+}
+
+async function assertStorageLimit(uploadBytes) {
+  if (!STORAGE_LIMIT_BYTES) {
+    return null;
+  }
+
+  const usage = await getStorageUsage(uploadBytes);
+
+  if (!usage.wouldExceedLimit) {
     return null;
   }
 
   return {
-    currentBytes,
-    uploadBytes,
-    limitBytes: STORAGE_LIMIT_BYTES,
-    message: `Limite de armazenamento atingido. Uso atual: ${formatMb(currentBytes)}. Upload solicitado: ${formatMb(uploadBytes)}. Limite configurado: ${formatMb(STORAGE_LIMIT_BYTES)}.`
+    currentBytes: usage.currentBytes,
+    uploadBytes: usage.uploadBytes,
+    limitBytes: usage.limitBytes,
+    message: `Limite de armazenamento atingido. Uso atual: ${usage.currentFormatted}. Upload solicitado: ${formatMb(uploadBytes)}. Limite configurado: ${usage.limitFormatted}.`
   };
 }
 
@@ -179,6 +205,15 @@ router.get("/categories", async (_req, res) => {
   });
 
   return res.json({ categories: categories.map(categoryResponse) });
+});
+
+router.get("/storage-usage", async (_req, res) => {
+  const usage = await getStorageUsage();
+
+  return res.json({
+    ok: true,
+    storage: usage
+  });
 });
 
 router.get("/categories/:id", async (req, res) => {

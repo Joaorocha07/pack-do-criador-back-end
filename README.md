@@ -316,6 +316,15 @@ GET /admin/stickers/categories
 
 Retorna os mesmos cards de `GET /stickers/categories`, com `coverImageId` e `coverUrl`.
 
+### Admin: uso do storage
+
+```http
+GET /admin/stickers/storage-usage
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+Retorna o total usado pelas imagens registradas no banco e o limite configurado em `STICKER_STORAGE_MAX_MB`.
+
 ### Admin: detalhar categoria
 
 ```http
