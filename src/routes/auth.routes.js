@@ -9,7 +9,8 @@ const router = express.Router();
 
 const loginSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(6)
+  password: z.string().min(6),
+  deviceId: z.string().trim().min(8).max(255).optional()
 });
 
 const changePasswordSchema = z.object({
@@ -19,6 +20,17 @@ const changePasswordSchema = z.object({
 
 function roleForApi(role) {
   return String(role || "USER").toLowerCase();
+}
+
+function getRequestDeviceId(req, bodyDeviceId) {
+  const headerDeviceId = req.headers["x-device-id"];
+  const deviceId = bodyDeviceId || headerDeviceId;
+
+  return typeof deviceId === "string" ? deviceId.trim() : null;
+}
+
+function shouldEnforceDevice(profile) {
+  return roleForApi(profile?.role) === "user";
 }
 
 function profileStatus(profile) {
@@ -57,7 +69,11 @@ function authUserResponse(user) {
       roleLabel: roleForApi(profile.role),
       temporarilyDisabled: status.temporarilyDisabled,
       disabledUntil: status.disabledUntil,
-      disabledReason: status.disabledReason
+      disabledReason: status.disabledReason,
+      deviceId: profile.deviceId || null,
+      deviceBoundAt: profile.deviceBoundAt || null,
+      deviceBound: Boolean(profile.deviceId),
+      requiresDeviceId: shouldEnforceDevice(profile)
     }
   };
 }
@@ -79,7 +95,8 @@ router.post("/login", async (req, res) => {
     return res.status(401).json({ error: "Acesso nao encontrado." });
   }
 
-  const status = profileStatus(user.profile);
+  let profile = user.profile;
+  const status = profileStatus(profile);
 
   if (status.temporarilyDisabled) {
     return res.status(403).json({
@@ -93,6 +110,33 @@ router.post("/login", async (req, res) => {
 
   if (!passwordMatches) {
     return res.status(401).json({ error: "Email ou senha invalidos." });
+  }
+
+  if (shouldEnforceDevice(profile)) {
+    const deviceId = getRequestDeviceId(req, parsed.data.deviceId);
+
+    if (!deviceId) {
+      return res.status(400).json({
+        error: "ID do aparelho nao informado.",
+        message: "Envie deviceId no body ou no header x-device-id."
+      });
+    }
+
+    if (!profile.deviceId) {
+      profile = await prisma.userProfile.update({
+        where: { userId: user.id },
+        data: {
+          deviceId,
+          deviceBoundAt: new Date()
+        }
+      });
+      user.profile = profile;
+    } else if (profile.deviceId !== deviceId) {
+      return res.status(403).json({
+        error: "Acesso bloqueado neste aparelho.",
+        message: "Este perfil ja esta vinculado a outro aparelho. Fale com o suporte para resetar o acesso."
+      });
+    }
   }
 
   return res.json({

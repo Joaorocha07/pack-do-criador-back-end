@@ -29,12 +29,20 @@ const passwordUpdateSchema = z.object({
   temporaryPassword: z.boolean().optional()
 });
 
+const deviceUpdateSchema = z.object({
+  deviceId: z.string().trim().min(8).max(255)
+});
+
 function normalize(value) {
   return String(value || "").trim().toLowerCase();
 }
 
 function roleForApi(role) {
   return String(role || "USER").toLowerCase();
+}
+
+function shouldEnforceDevice(profile) {
+  return roleForApi(profile?.role) === "user";
 }
 
 function profileStatus(profile) {
@@ -100,7 +108,11 @@ function userResponse(user) {
       roleLabel: roleForApi(profile.role),
       temporarilyDisabled: status.temporarilyDisabled,
       disabledUntil: status.disabledUntil,
-      disabledReason: status.disabledReason
+      disabledReason: status.disabledReason,
+      deviceId: profile.deviceId || null,
+      deviceBoundAt: profile.deviceBoundAt || null,
+      deviceBound: Boolean(profile.deviceId),
+      requiresDeviceId: shouldEnforceDevice(profile)
     }
   };
 }
@@ -470,6 +482,76 @@ router.patch("/users/:id/password", async (req, res) => {
     ok: true,
     message: "Senha do perfil atualizada.",
     user: userResponse(updatedUser)
+  });
+});
+
+router.patch("/users/:id/device", async (req, res) => {
+  const parsed = deviceUpdateSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: "Informe deviceId com no minimo 8 caracteres."
+    });
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    include: { profile: true }
+  });
+
+  if (!user) {
+    return res.status(404).json({ error: "Usuario nao encontrado." });
+  }
+
+  const profile = await prisma.userProfile.upsert({
+    where: { userId: user.id },
+    create: {
+      userId: user.id,
+      role: user.role || "USER",
+      deviceId: parsed.data.deviceId,
+      deviceBoundAt: new Date()
+    },
+    update: {
+      deviceId: parsed.data.deviceId,
+      deviceBoundAt: new Date()
+    }
+  });
+
+  return res.json({
+    ok: true,
+    message: "Aparelho do perfil atualizado.",
+    user: userResponse({ ...user, profile })
+  });
+});
+
+router.delete("/users/:id/device", async (req, res) => {
+  const user = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    include: { profile: true }
+  });
+
+  if (!user) {
+    return res.status(404).json({ error: "Usuario nao encontrado." });
+  }
+
+  const profile = await prisma.userProfile.upsert({
+    where: { userId: user.id },
+    create: {
+      userId: user.id,
+      role: user.role || "USER",
+      deviceId: null,
+      deviceBoundAt: null
+    },
+    update: {
+      deviceId: null,
+      deviceBoundAt: null
+    }
+  });
+
+  return res.json({
+    ok: true,
+    message: "Vinculo de aparelho resetado.",
+    user: userResponse({ ...user, profile })
   });
 });
 

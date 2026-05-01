@@ -217,7 +217,11 @@ Retorna:
         "roleLabel": "user",
         "temporarilyDisabled": false,
         "disabledUntil": null,
-        "disabledReason": null
+        "disabledReason": null,
+        "deviceId": "DEVICE_ID_DO_USUARIO",
+        "deviceBoundAt": "2026-05-01T00:00:00.000Z",
+        "deviceBound": true,
+        "requiresDeviceId": true
       }
     }
   ]
@@ -290,6 +294,62 @@ Body:
 ```
 
 Retorna `{ "ok": true, "message": "Senha do perfil atualizada.", "user": { ... } }`.
+
+### Admin: alterar aparelho vinculado
+
+```http
+PATCH https://URL-GERADA-PELO-RENDER/admin/users/USER_ID/device
+Content-Type: application/json
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+Body:
+
+```json
+{
+  "deviceId": "DEVICE_ID_NOVO"
+}
+```
+
+Retorna `{ "ok": true, "message": "Aparelho do perfil atualizado.", "user": { ... } }`.
+
+### Admin: resetar aparelho vinculado
+
+```http
+DELETE https://URL-GERADA-PELO-RENDER/admin/users/USER_ID/device
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+Retorna `{ "ok": true, "message": "Vinculo de aparelho resetado.", "user": { ... } }`. No proximo login/acesso do perfil `user`, o primeiro `deviceId` enviado vira o aparelho vinculado.
+
+### Login com ID do aparelho
+
+Perfis `user` precisam enviar o mesmo `deviceId` no login e nas chamadas protegidas. O front pode gerar um UUID uma vez e salvar em `localStorage`.
+
+```http
+POST https://URL-GERADA-PELO-RENDER/auth/login
+Content-Type: application/json
+x-device-id: DEVICE_ID_DO_APARELHO
+```
+
+Body:
+
+```json
+{
+  "email": "cliente@email.com",
+  "password": "senha-do-cliente",
+  "deviceId": "DEVICE_ID_DO_APARELHO"
+}
+```
+
+Em chamadas protegidas do usuario, envie:
+
+```http
+Authorization: Bearer SEU_TOKEN
+x-device-id: DEVICE_ID_DO_APARELHO
+```
+
+Se o perfil `user` tentar acessar de outro aparelho, a API retorna `403`.
 
 ### Enviar email de acesso manualmente
 

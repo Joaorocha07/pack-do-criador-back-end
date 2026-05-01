@@ -15,6 +15,20 @@ function activeProfileStatus(profile) {
   };
 }
 
+function roleForApi(role) {
+  return String(role || "USER").toLowerCase();
+}
+
+function getRequestDeviceId(req) {
+  const deviceId = req.headers["x-device-id"];
+
+  return typeof deviceId === "string" ? deviceId.trim() : null;
+}
+
+function shouldEnforceDevice(profile) {
+  return roleForApi(profile?.role) === "user";
+}
+
 function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith("Bearer ")
@@ -102,6 +116,33 @@ async function requireActiveAccess(req, res, next) {
         disabledUntil: status.disabledUntil,
         disabledReason: status.disabledReason
       });
+    }
+
+    if (shouldEnforceDevice(user.profile)) {
+      const deviceId = getRequestDeviceId(req);
+
+      if (!deviceId) {
+        return res.status(400).json({
+          error: "ID do aparelho nao informado.",
+          message: "Envie o header x-device-id em chamadas protegidas."
+        });
+      }
+
+      if (!user.profile?.deviceId) {
+        const profile = await prisma.userProfile.update({
+          where: { userId: user.id },
+          data: {
+            deviceId,
+            deviceBoundAt: new Date()
+          }
+        });
+        user.profile = profile;
+      } else if (user.profile.deviceId !== deviceId) {
+        return res.status(403).json({
+          error: "Acesso bloqueado neste aparelho.",
+          message: "Este perfil ja esta vinculado a outro aparelho. Fale com o suporte para resetar o acesso."
+        });
+      }
     }
 
     req.accessUser = user;
