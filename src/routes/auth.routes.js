@@ -17,6 +17,51 @@ const changePasswordSchema = z.object({
   newPassword: z.string().min(8)
 });
 
+function roleForApi(role) {
+  return String(role || "USER").toLowerCase();
+}
+
+function profileStatus(profile) {
+  const disabledUntil = profile?.disabledUntil || null;
+  const temporarilyDisabled = Boolean(
+    profile?.temporarilyDisabled &&
+      (!disabledUntil || new Date(disabledUntil).getTime() > Date.now())
+  );
+
+  return {
+    temporarilyDisabled,
+    disabledUntil,
+    disabledReason: profile?.disabledReason || null
+  };
+}
+
+function authUserResponse(user) {
+  const profile = user.profile || {
+    role: user.role,
+    temporarilyDisabled: false,
+    disabledUntil: null,
+    disabledReason: null
+  };
+  const status = profileStatus(profile);
+
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: profile.role,
+    roleLabel: roleForApi(profile.role),
+    hasAccess: user.hasAccess,
+    temporaryPassword: user.temporaryPassword,
+    profile: {
+      role: profile.role,
+      roleLabel: roleForApi(profile.role),
+      temporarilyDisabled: status.temporarilyDisabled,
+      disabledUntil: status.disabledUntil,
+      disabledReason: status.disabledReason
+    }
+  };
+}
+
 router.post("/login", async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
 
@@ -25,10 +70,23 @@ router.post("/login", async (req, res) => {
   }
 
   const email = parsed.data.email.toLowerCase();
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { profile: true }
+  });
 
   if (!user || !user.hasAccess) {
     return res.status(401).json({ error: "Acesso nao encontrado." });
+  }
+
+  const status = profileStatus(user.profile);
+
+  if (status.temporarilyDisabled) {
+    return res.status(403).json({
+      error: "Conta temporariamente desativada.",
+      disabledUntil: status.disabledUntil,
+      disabledReason: status.disabledReason
+    });
   }
 
   const passwordMatches = await comparePassword(parsed.data.password, user.passwordHash);
@@ -38,15 +96,8 @@ router.post("/login", async (req, res) => {
   }
 
   return res.json({
-    token: signAccessToken(user),
-    user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      hasAccess: user.hasAccess,
-      temporaryPassword: user.temporaryPassword
-    }
+    token: signAccessToken({ ...user, role: user.profile?.role || user.role }),
+    user: authUserResponse(user)
   });
 });
 
@@ -57,10 +108,23 @@ router.post("/change-password", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Dados invalidos." });
   }
 
-  const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+  const user = await prisma.user.findUnique({
+    where: { id: req.user.sub },
+    include: { profile: true }
+  });
 
   if (!user) {
     return res.status(404).json({ error: "Usuario nao encontrado." });
+  }
+
+  const status = profileStatus(user.profile);
+
+  if (status.temporarilyDisabled) {
+    return res.status(403).json({
+      error: "Conta temporariamente desativada.",
+      disabledUntil: status.disabledUntil,
+      disabledReason: status.disabledReason
+    });
   }
 
   const passwordMatches = await comparePassword(
@@ -96,7 +160,8 @@ router.get("/me", requireAuth, async (req, res) => {
       email: true,
       role: true,
       hasAccess: true,
-      temporaryPassword: true
+      temporaryPassword: true,
+      profile: true
     }
   });
 
@@ -104,7 +169,17 @@ router.get("/me", requireAuth, async (req, res) => {
     return res.status(401).json({ error: "Acesso nao encontrado." });
   }
 
-  return res.json({ user });
+  const status = profileStatus(user.profile);
+
+  if (status.temporarilyDisabled) {
+    return res.status(403).json({
+      error: "Conta temporariamente desativada.",
+      disabledUntil: status.disabledUntil,
+      disabledReason: status.disabledReason
+    });
+  }
+
+  return res.json({ user: authUserResponse(user) });
 });
 
 module.exports = router;

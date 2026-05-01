@@ -87,9 +87,32 @@ app.use((error, req, res, next) => {
 
 const port = process.env.PORT || 3333;
 
+async function ensureUserProfiles() {
+  const usersWithoutProfile = await prisma.user.findMany({
+    where: { profile: { is: null } },
+    select: { id: true, role: true }
+  });
+
+  for (const user of usersWithoutProfile) {
+    await prisma.userProfile.create({
+      data: {
+        userId: user.id,
+        role: user.role || "USER"
+      }
+    });
+  }
+
+  if (usersWithoutProfile.length) {
+    console.log("[profiles] Perfis criados para usuarios existentes.", {
+      total: usersWithoutProfile.length
+    });
+  }
+}
+
 async function startServer() {
   try {
     await connectPrisma();
+    await ensureUserProfiles();
 
     const server = app.listen(port, () => {
       console.log(`API rodando na porta ${port}`);

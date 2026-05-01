@@ -19,7 +19,23 @@ model User {
   accessEmailSentAt DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+  profile           UserProfile?
   purchases         Purchase[]
+}
+
+model UserProfile {
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+  role                  String    @default("USER")
+  temporarilyDisabled   Boolean   @default(false)
+  disabledUntil         DateTime?
+  disabledReason        String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([role])
+  @@index([temporarilyDisabled])
 }
 
 model Purchase {

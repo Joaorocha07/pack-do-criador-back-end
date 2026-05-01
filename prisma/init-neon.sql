@@ -27,6 +27,43 @@ ADD COLUMN IF NOT EXISTS "accessEmailSent" BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE "User"
 ADD COLUMN IF NOT EXISTS "accessEmailSentAt" TIMESTAMP(3);
 
+CREATE TABLE IF NOT EXISTS "UserProfile" (
+  "id" TEXT NOT NULL,
+  "userId" TEXT NOT NULL,
+  "role" TEXT NOT NULL DEFAULT 'USER',
+  "temporarilyDisabled" BOOLEAN NOT NULL DEFAULT false,
+  "disabledUntil" TIMESTAMP(3),
+  "disabledReason" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT "UserProfile_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "UserProfile_userId_key" ON "UserProfile"("userId");
+CREATE INDEX IF NOT EXISTS "UserProfile_role_idx" ON "UserProfile"("role");
+CREATE INDEX IF NOT EXISTS "UserProfile_temporarilyDisabled_idx" ON "UserProfile"("temporarilyDisabled");
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'UserProfile_userId_fkey'
+  ) THEN
+    ALTER TABLE "UserProfile"
+    ADD CONSTRAINT "UserProfile_userId_fkey"
+    FOREIGN KEY ("userId") REFERENCES "User"("id")
+    ON DELETE CASCADE
+    ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+INSERT INTO "UserProfile" ("id", "userId", "role", "createdAt", "updatedAt")
+SELECT gen_random_uuid()::text, "id", "role", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+FROM "User"
+ON CONFLICT ("userId") DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS "Purchase" (
   "id" TEXT NOT NULL,
   "caktoSaleId" TEXT NOT NULL,

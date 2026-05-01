@@ -197,6 +197,100 @@ GET https://URL-GERADA-PELO-RENDER/admin/users
 Authorization: Bearer SEU_TOKEN_ADMIN
 ```
 
+Retorna:
+
+```json
+{
+  "ok": true,
+  "users": [
+    {
+      "id": "USER_ID",
+      "name": "Cliente",
+      "email": "cliente@email.com",
+      "role": "USER",
+      "roleLabel": "user",
+      "hasAccess": true,
+      "temporaryPassword": false,
+      "profile": {
+        "id": "PROFILE_ID",
+        "role": "USER",
+        "roleLabel": "user",
+        "temporarilyDisabled": false,
+        "disabledUntil": null,
+        "disabledReason": null
+      }
+    }
+  ]
+}
+```
+
+Roles aceitos pelo front: `admin`, `user`, `teste`, `afiliado`.
+
+### Admin: alterar tipo de perfil
+
+```http
+PATCH https://URL-GERADA-PELO-RENDER/admin/users/USER_ID/role
+Content-Type: application/json
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+Body:
+
+```json
+{
+  "role": "afiliado"
+}
+```
+
+Retorna `{ "ok": true, "message": "Tipo de perfil atualizado.", "user": { ... } }`.
+
+### Admin: desativar conta temporariamente
+
+```http
+PATCH https://URL-GERADA-PELO-RENDER/admin/users/USER_ID/temporary-disable
+Content-Type: application/json
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+Body:
+
+```json
+{
+  "disabledUntil": "2026-05-08T23:59:59.000Z",
+  "reason": "Pausa temporaria solicitada pelo suporte."
+}
+```
+
+Enquanto estiver desativado, login e endpoints protegidos retornam `403` com `disabledUntil` e `disabledReason`.
+
+### Admin: reativar conta
+
+```http
+DELETE https://URL-GERADA-PELO-RENDER/admin/users/USER_ID/temporary-disable
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+Retorna `{ "ok": true, "message": "Conta reativada.", "user": { ... } }`.
+
+### Admin: alterar senha de um perfil
+
+```http
+PATCH https://URL-GERADA-PELO-RENDER/admin/users/USER_ID/password
+Content-Type: application/json
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+Body:
+
+```json
+{
+  "password": "nova-senha-segura",
+  "temporaryPassword": false
+}
+```
+
+Retorna `{ "ok": true, "message": "Senha do perfil atualizada.", "user": { ... } }`.
+
 ### Enviar email de acesso manualmente
 
 ```http

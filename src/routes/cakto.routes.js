@@ -138,6 +138,17 @@ function isLikelyTestEvent(payload) {
   return isTestFlag || event.includes("test") || event.includes("teste");
 }
 
+async function ensureUserProfile(user) {
+  return prisma.userProfile.upsert({
+    where: { userId: user.id },
+    create: {
+      userId: user.id,
+      role: user.role || "USER"
+    },
+    update: {}
+  });
+}
+
 router.get("/", (req, res) => {
   if (!hasValidWebhookSecret(req)) {
     return res.status(401).json({ error: "Webhook nao autorizado." });
@@ -236,6 +247,7 @@ router.post("/", async (req, res) => {
         userId: user.id,
         email: maskEmail(email)
       });
+      await ensureUserProfile(user);
     } else if (!existingUser.hasAccess) {
       passwordToSend = generateTemporaryPassword();
       user = await prisma.user.update({
@@ -251,6 +263,7 @@ router.post("/", async (req, res) => {
         userId: user.id,
         email: maskEmail(email)
       });
+      await ensureUserProfile(user);
     } else {
       user = await prisma.user.update({
         where: { id: existingUser.id },
@@ -263,6 +276,7 @@ router.post("/", async (req, res) => {
         userId: user.id,
         email: maskEmail(email)
       });
+      await ensureUserProfile(user);
     }
 
     await prisma.purchase.create({

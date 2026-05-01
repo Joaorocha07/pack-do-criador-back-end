@@ -1,6 +1,20 @@
 const jwt = require("jsonwebtoken");
 const prisma = require("../lib/prisma");
 
+function activeProfileStatus(profile) {
+  const disabledUntil = profile?.disabledUntil || null;
+  const temporarilyDisabled = Boolean(
+    profile?.temporarilyDisabled &&
+      (!disabledUntil || new Date(disabledUntil).getTime() > Date.now())
+  );
+
+  return {
+    temporarilyDisabled,
+    disabledUntil,
+    disabledReason: profile?.disabledReason || null
+  };
+}
+
 function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith("Bearer ")
@@ -19,7 +33,44 @@ function requireAuth(req, res, next) {
   }
 }
 
-function requireAdmin(req, res, next) {
+async function requireAdmin(req, res, next) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user?.sub },
+      select: {
+        id: true,
+        role: true,
+        hasAccess: true,
+        profile: true
+      }
+    });
+
+    const role = user?.profile?.role || user?.role || req.user?.role;
+    const status = activeProfileStatus(user?.profile);
+
+    if (!user || !user.hasAccess || status.temporarilyDisabled) {
+      return res.status(403).json({
+        error: status.temporarilyDisabled
+          ? "Conta temporariamente desativada."
+          : "Acesso restrito ao administrador.",
+        disabledUntil: status.disabledUntil,
+        disabledReason: status.disabledReason
+      });
+    }
+
+    if (!["ADMIN", "SUPER_ADMIN"].includes(role)) {
+      return res.status(403).json({ error: "Acesso restrito ao administrador." });
+    }
+
+    req.adminUser = user;
+    return next();
+  } catch (error) {
+    console.error("[auth] Falha ao verificar permissao de administrador.", error);
+    return res.status(500).json({ error: "Falha ao verificar permissao." });
+  }
+}
+
+function requireAdminFromToken(req, res, next) {
   if (!["ADMIN", "SUPER_ADMIN"].includes(req.user?.role)) {
     return res.status(403).json({ error: "Acesso restrito ao administrador." });
   }
@@ -31,11 +82,26 @@ async function requireActiveAccess(req, res, next) {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user?.sub },
-      select: { id: true, role: true, hasAccess: true }
+      select: {
+        id: true,
+        role: true,
+        hasAccess: true,
+        profile: true
+      }
     });
 
     if (!user || !user.hasAccess) {
       return res.status(403).json({ error: "Acesso nao liberado." });
+    }
+
+    const status = activeProfileStatus(user.profile);
+
+    if (status.temporarilyDisabled) {
+      return res.status(403).json({
+        error: "Conta temporariamente desativada.",
+        disabledUntil: status.disabledUntil,
+        disabledReason: status.disabledReason
+      });
     }
 
     req.accessUser = user;
@@ -46,4 +112,4 @@ async function requireActiveAccess(req, res, next) {
   }
 }
 
-module.exports = { requireActiveAccess, requireAdmin, requireAuth };
+module.exports = { requireActiveAccess, requireAdmin, requireAdminFromToken, requireAuth };
