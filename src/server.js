@@ -10,6 +10,7 @@ const adminStickerRoutes = require("./routes/admin-stickers.routes");
 const adminRoutes = require("./routes/admin.routes");
 const authRoutes = require("./routes/auth.routes");
 const caktoRoutes = require("./routes/cakto.routes");
+const checkoutRoutes = require("./routes/checkout.routes");
 const stickerRoutes = require("./routes/stickers.routes");
 const { requireAdmin, requireAuth } = require("./middlewares/auth");
 
@@ -62,6 +63,7 @@ app.get("/health/db", async (_req, res) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/checkout", checkoutRoutes);
 app.use("/admin", adminRoutes);
 app.use("/admin/stickers", requireAuth, requireAdmin, adminStickerRoutes);
 app.use("/stickers", stickerRoutes);

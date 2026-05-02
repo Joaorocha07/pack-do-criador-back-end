@@ -33,6 +33,9 @@ Copy-Item .env.example .env
 - `JWT_SECRET`: segredo grande para assinar JWT.
 - `CAKTO_WEBHOOK_SECRET`: segredo para proteger o webhook.
 - `CAKTO_PRODUCT_NAME`: nome do produto que deve liberar acesso.
+- `CHECKOUT_AFFILIATE_URL`: link de checkout com afiliada.
+- `CHECKOUT_OWN_URL`: link de checkout sem afiliada.
+- `CHECKOUT_ROTATION_SOURCE`: use `purchases` para alternar por vendas registradas ou `users` para alternar por usuarios com acesso.
 - `SMTP_*`: dados do provedor de email.
 - `APP_URL`: URL do seu frontend/login.
 - `STICKER_STORAGE_DIR`: pasta privada onde as imagens das figurinhas ficam salvas.
@@ -67,6 +70,10 @@ ADMIN_IMPORT_SECRET=seu-segredo-de-importacao
 CAKTO_PRODUCT_NAME=Pack do Criador
 CAKTO_CLIENT_ID=client-id-da-cakto
 CAKTO_CLIENT_SECRET=client-secret-da-cakto
+CHECKOUT_AFFILIATE_URL=https://pay.cakto.com.br/wjzbfzc_596335?affiliate=6daZPhsr
+CHECKOUT_OWN_URL=https://pay.cakto.com.br/wjzbfzc_596335
+CHECKOUT_AFFILIATE_SALES_BEFORE_OWN=3
+CHECKOUT_ROTATION_SOURCE=purchases
 SMTP_HOST=smtp-relay.brevo.com
 SMTP_PORT=2525
 SMTP_SECURE=false
@@ -784,6 +791,36 @@ Resposta:
 ```
 
 Depois do logout, remova o token salvo no front.
+
+### `GET /checkout/link`
+
+Endpoint publico, sem JWT, para buscar o link de venda da vez.
+
+Com `CHECKOUT_AFFILIATE_SALES_BEFORE_OWN=3`, o ciclo fica assim:
+
+- posicoes 1, 2 e 3: `CHECKOUT_AFFILIATE_URL`
+- posicao 4: `CHECKOUT_OWN_URL`
+- posicao 5: reinicia no link afiliado
+
+Resposta:
+
+```json
+{
+  "url": "https://pay.cakto.com.br/wjzbfzc_596335?affiliate=6daZPhsr",
+  "target": "affiliate",
+  "source": "purchases",
+  "currentCount": 0,
+  "nextPosition": 1,
+  "cycleSize": 4,
+  "affiliateSlots": 3
+}
+```
+
+Se quiser redirecionar direto para a Cakto, use:
+
+```text
+GET /checkout/link?redirect=true
+```
 
 ### `POST /webhooks/cakto`
 
