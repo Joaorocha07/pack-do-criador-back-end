@@ -190,12 +190,14 @@ Body:
 
 O importador busca pedidos pagos do produto definido em `CAKTO_PRODUCT_NAME`, cria usuarios no Neon e envia email de acesso quando `sendEmail` for `true`.
 
-### Listar usuarios importados
+### Listar usuarios e afiliados
 
 ```http
 GET https://URL-GERADA-PELO-RENDER/admin/users
 Authorization: Bearer SEU_TOKEN_ADMIN
 ```
+
+Por padrao, a resposta junta os usuarios salvos no Neon com afiliados encontrados nos pedidos pagos da Cakto para o produto configurado em `CAKTO_PRODUCT_NAME`. Afiliados que ja existem no Neon nao sao duplicados.
 
 Retorna:
 
@@ -224,8 +226,30 @@ Retorna:
         "deviceBound": true,
         "requiresDeviceId": true
       }
+    },
+    {
+      "id": "cakto-affiliate-123",
+      "name": "-",
+      "email": "afiliado@email.com",
+      "role": "AFILIADO",
+      "roleLabel": "afiliado",
+      "hasAccess": false,
+      "source": "cakto",
+      "affiliate": {
+        "id": 123,
+        "productName": "Pack do Criador",
+        "commissionPercentage": 30,
+        "commissionValue": 29.9,
+        "lastOrderId": "ORDER_ID",
+        "lastOrderDate": "2026-05-01T00:00:00.000Z"
+      }
     }
-  ]
+  ],
+  "sources": {
+    "database": 1,
+    "caktoAffiliates": 1
+  },
+  "warnings": []
 }
 ```
 

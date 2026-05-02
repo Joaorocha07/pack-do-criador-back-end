@@ -126,6 +126,86 @@ function isPaidPackOrder(order) {
   return productName === expectedProduct && status === "paid";
 }
 
+function getCommissionForUser(order, commissionedUser) {
+  const commissionedUserId = String(commissionedUser?.id || "");
+
+  return (order.commissions || []).find((commission) => {
+    const commissionUserId = String(commission.userId || commission.user_id || "");
+    return commissionUserId === commissionedUserId && normalize(commission.type) === "affiliate";
+  });
+}
+
+function affiliateResponse({ commissionedUser, commission, order }) {
+  const email = commissionedUser?.email?.toLowerCase() || null;
+  const fallbackId = email || commissionedUser?.id;
+
+  return {
+    id: `cakto-affiliate-${fallbackId}`,
+    name: commissionedUser?.name || commissionedUser?.fullName || "-",
+    email,
+    role: "AFILIADO",
+    roleLabel: "afiliado",
+    hasAccess: false,
+    temporaryPassword: false,
+    accessEmailSent: false,
+    accessEmailSentAt: null,
+    source: "cakto",
+    affiliate: {
+      id: commissionedUser?.id || null,
+      productName: order.product?.name || null,
+      commissionPercentage: commission?.commissionPercentage ?? null,
+      commissionValue: commission?.commissionValue ?? null,
+      lastOrderId: order.id || null,
+      lastOrderDate: order.paidAt || order.createdAt || null
+    },
+    profile: {
+      id: null,
+      role: "AFILIADO",
+      roleLabel: "afiliado",
+      temporarilyDisabled: false,
+      disabledUntil: null,
+      disabledReason: null,
+      deviceId: null,
+      deviceBoundAt: null,
+      deviceBlockedEmailSentAt: null,
+      deviceBound: false,
+      requiresDeviceId: false
+    }
+  };
+}
+
+async function listCaktoAffiliateUsers({ maxPages = 20 } = {}) {
+  const orders = await listCaktoOrders({ maxPages });
+  const affiliatesByKey = new Map();
+
+  for (const order of orders.filter(isPaidPackOrder)) {
+    for (const commissionedUser of order.commissionedUsers || []) {
+      const commission = getCommissionForUser(order, commissionedUser);
+
+      if (!commission) {
+        continue;
+      }
+
+      const key = normalize(commissionedUser.email) || String(commissionedUser.id || "");
+
+      if (!key || affiliatesByKey.has(key)) {
+        continue;
+      }
+
+      affiliatesByKey.set(
+        key,
+        affiliateResponse({
+          commissionedUser,
+          commission,
+          order
+        })
+      );
+    }
+  }
+
+  return Array.from(affiliatesByKey.values());
+}
+
 async function importOrder(order, { sendEmail }) {
   const email = order.customer?.email?.toLowerCase();
 
@@ -314,6 +394,10 @@ router.post("/import-cakto-purchases", async (req, res) => {
 });
 
 router.get("/users", async (req, res) => {
+  const requestedAffiliatePages = Number(req.query.affiliatePages || 20);
+  const maxAffiliatePages = Number.isFinite(requestedAffiliatePages)
+    ? Math.max(1, requestedAffiliatePages)
+    : 20;
   const users = await prisma.user.findMany({
     orderBy: { createdAt: "desc" },
     select: {
@@ -328,8 +412,36 @@ router.get("/users", async (req, res) => {
       profile: true
     }
   });
+  const localUsers = users.map(userResponse);
+  let caktoAffiliates = [];
+  let caktoAffiliateError = null;
 
-  return res.json({ ok: true, users: users.map(userResponse) });
+  try {
+    caktoAffiliates = await listCaktoAffiliateUsers({ maxPages: maxAffiliatePages });
+  } catch (error) {
+    caktoAffiliateError = error.message;
+    console.error("[admin:users] Falha ao listar afiliados da Cakto.", {
+      message: error.message
+    });
+  }
+
+  const localEmails = new Set(localUsers.map((user) => normalize(user.email)).filter(Boolean));
+  const externalAffiliates = caktoAffiliates.filter((affiliate) => {
+    const email = normalize(affiliate.email);
+    return !email || !localEmails.has(email);
+  });
+
+  return res.json({
+    ok: true,
+    users: [...localUsers, ...externalAffiliates],
+    sources: {
+      database: localUsers.length,
+      caktoAffiliates: externalAffiliates.length
+    },
+    warnings: caktoAffiliateError
+      ? [{ source: "cakto", message: "Afiliados da Cakto nao foram carregados.", detail: caktoAffiliateError }]
+      : []
+  });
 });
 
 router.patch("/users/:id/role", async (req, res) => {
