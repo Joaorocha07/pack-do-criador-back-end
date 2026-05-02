@@ -33,6 +33,18 @@ const deviceUpdateSchema = z.object({
   deviceId: z.string().trim().min(8).max(255)
 });
 
+const affiliateImportSchema = z.object({
+  affiliates: z.array(
+    z.object({
+      name: z.string().trim().optional().nullable(),
+      email: z.string().trim().email(),
+      productName: z.string().trim().optional().nullable(),
+      commissionPercentage: z.union([z.string(), z.number()]).optional().nullable(),
+      status: z.string().trim().optional().nullable()
+    })
+  )
+});
+
 function normalize(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -298,6 +310,64 @@ async function importOrder(order, { sendEmail }) {
   };
 }
 
+async function importAffiliate(affiliate) {
+  const email = normalize(affiliate.email);
+  const name = affiliate.name && affiliate.name !== "-" ? affiliate.name : null;
+  const existingUser = await prisma.user.findUnique({
+    where: { email },
+    include: { profile: true }
+  });
+
+  if (existingUser) {
+    const role = existingUser.role === "ADMIN" ? existingUser.role : "AFILIADO";
+    const updatedUser = await prisma.user.update({
+      where: { id: existingUser.id },
+      data: {
+        name: name || existingUser.name,
+        role
+      },
+      include: { profile: true }
+    });
+    const profile = await prisma.userProfile.upsert({
+      where: { userId: existingUser.id },
+      create: {
+        userId: existingUser.id,
+        role
+      },
+      update: {
+        role
+      }
+    });
+
+    return {
+      imported: false,
+      updated: true,
+      email,
+      user: userResponse({ ...updatedUser, profile })
+    };
+  }
+
+  const password = generateTemporaryPassword();
+  const user = await prisma.user.create({
+    data: {
+      email,
+      name,
+      role: "AFILIADO",
+      passwordHash: await hashPassword(password),
+      hasAccess: false,
+      temporaryPassword: false
+    }
+  });
+  const profile = await ensureUserProfile(user);
+
+  return {
+    imported: true,
+    updated: false,
+    email,
+    user: userResponse({ ...user, profile })
+  };
+}
+
 router.post("/bootstrap-admin", requireAdminImportSecret, async (req, res) => {
   const email = req.body?.email?.toLowerCase();
   const password = req.body?.password;
@@ -391,6 +461,32 @@ router.post("/import-cakto-purchases", async (req, res) => {
       message: error.message
     });
   }
+});
+
+router.post("/import-affiliates", async (req, res) => {
+  const parsed = affiliateImportSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: "Informe affiliates com nome e email dos afiliados."
+    });
+  }
+
+  const results = [];
+
+  for (const affiliate of parsed.data.affiliates) {
+    results.push(await importAffiliate(affiliate));
+  }
+
+  return res.json({
+    ok: true,
+    summary: {
+      received: parsed.data.affiliates.length,
+      imported: results.filter((result) => result.imported).length,
+      updated: results.filter((result) => result.updated).length
+    },
+    users: results.map((result) => result.user)
+  });
 });
 
 router.get("/users", async (req, res) => {

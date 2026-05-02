@@ -190,6 +190,41 @@ Body:
 
 O importador busca pedidos pagos do produto definido em `CAKTO_PRODUCT_NAME`, cria usuarios no Neon e envia email de acesso quando `sendEmail` for `true`.
 
+### Importar afiliados manualmente
+
+A API publica da Cakto retorna afiliados comissionados em pedidos, mas nao expõe a lista completa de **Meus Afiliados** do painel. Para fazer esses afiliados aparecerem em `/admin/users`, importe os emails uma vez:
+
+```http
+POST https://URL-GERADA-PELO-RENDER/admin/import-affiliates
+Content-Type: application/json
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+Body:
+
+```json
+{
+  "affiliates": [
+    {
+      "name": "-",
+      "email": "isalellis01@gmail.com",
+      "productName": "Pack do Criador",
+      "commissionPercentage": 75,
+      "status": "Ativo"
+    },
+    {
+      "name": "Ana",
+      "email": "lauraana.brum@gmail.com",
+      "productName": "Pack do Criador",
+      "commissionPercentage": 30,
+      "status": "Ativo"
+    }
+  ]
+}
+```
+
+Retorna `{ "ok": true, "summary": { ... }, "users": [ ... ] }`.
+
 ### Listar usuarios e afiliados
 
 ```http
