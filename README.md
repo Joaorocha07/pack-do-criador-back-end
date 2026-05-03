@@ -38,7 +38,7 @@ Copy-Item .env.example .env
 - `CAKTO_PRODUCT_NAME`: nome do produto que deve liberar acesso.
 - `CHECKOUT_AFFILIATE_URL`: link de checkout com afiliada.
 - `CHECKOUT_OWN_URL`: link de checkout sem afiliada.
-- `CHECKOUT_ROTATION_SOURCE`: use `purchases` para alternar por vendas registradas ou `users` para alternar por usuarios com acesso.
+- `CHECKOUT_ROTATION_SOURCE`: use `checkout` para girar a cada chamada do endpoint, `purchases` para vendas registradas ou `database-users` para usuarios com acesso.
 - `EMAIL_PROVIDER`: use `brevo-api` na Railway ou `smtp` quando o host permitir SMTP.
 - `BREVO_API_KEY`: chave da API da Brevo para envio HTTPS.
 - `SMTP_*`: dados do provedor de email quando `EMAIL_PROVIDER=smtp`.
@@ -80,7 +80,7 @@ CAKTO_CLIENT_SECRET=client-secret-da-cakto
 CHECKOUT_AFFILIATE_URL=https://pay.cakto.com.br/wjzbfzc_596335?affiliate=6daZPhsr
 CHECKOUT_OWN_URL=https://pay.cakto.com.br/wjzbfzc_596335
 CHECKOUT_AFFILIATE_USERS_BEFORE_OWN=3
-CHECKOUT_ROTATION_SOURCE=users
+CHECKOUT_ROTATION_SOURCE=checkout
 EMAIL_PROVIDER=brevo-api
 BREVO_API_KEY=sua-api-key-da-brevo
 MAIL_FROM=Pack do Criador <email-validado-na-brevo@seudominio.com>
@@ -191,7 +191,7 @@ CAKTO_CLIENT_SECRET=client-secret-da-cakto
 CHECKOUT_AFFILIATE_URL=https://pay.cakto.com.br/wjzbfzc_596335?affiliate=6daZPhsr
 CHECKOUT_OWN_URL=https://pay.cakto.com.br/wjzbfzc_596335
 CHECKOUT_AFFILIATE_USERS_BEFORE_OWN=3
-CHECKOUT_ROTATION_SOURCE=users
+CHECKOUT_ROTATION_SOURCE=checkout
 EMAIL_PROVIDER=brevo-api
 BREVO_API_KEY=sua-api-key-da-brevo
 MAIL_FROM=Pack do Criador <email-validado-na-brevo@seudominio.com>
@@ -994,11 +994,11 @@ Depois do logout, remova o token salvo no front.
 
 Endpoint publico, sem JWT, para buscar o link de venda da vez.
 
-Com `CHECKOUT_ROTATION_SOURCE=users` e `CHECKOUT_AFFILIATE_USERS_BEFORE_OWN=3`, o ciclo por usuarios novos fica assim:
+Com `CHECKOUT_ROTATION_SOURCE=checkout` e `CHECKOUT_AFFILIATE_USERS_BEFORE_OWN=3`, o ciclo por chamadas do endpoint fica assim:
 
-- usuarios novos 1, 2 e 3: `CHECKOUT_AFFILIATE_URL`
-- usuario novo 4: `CHECKOUT_OWN_URL`
-- usuario novo 5: reinicia no link afiliado
+- chamadas 1, 2 e 3: `CHECKOUT_AFFILIATE_URL`
+- chamada 4: `CHECKOUT_OWN_URL`
+- chamada 5: reinicia no link afiliado
 
 Resposta:
 
@@ -1006,7 +1006,7 @@ Resposta:
 {
   "url": "https://pay.cakto.com.br/wjzbfzc_596335?affiliate=6daZPhsr",
   "target": "affiliate",
-  "source": "users",
+  "source": "checkout",
   "currentCount": 0,
   "nextPosition": 1,
   "cycleSize": 4,

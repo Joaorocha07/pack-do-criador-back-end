@@ -70,6 +70,12 @@ model Purchase {
   user           User?    @relation(fields: [userId], references: [id])
 }
 
+model CheckoutRotationState {
+  key       String   @id
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
 model StickerCategory {
   id          String                @id @default(uuid())
   slug        String                @unique

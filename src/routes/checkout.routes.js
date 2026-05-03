@@ -9,11 +9,19 @@ function parsePositiveInt(value, fallback) {
 }
 
 function getRotationSource() {
-  const source = String(process.env.CHECKOUT_ROTATION_SOURCE || "users")
+  const source = String(process.env.CHECKOUT_ROTATION_SOURCE || "checkout")
     .trim()
     .toLowerCase();
 
-  return source === "users" ? "users" : "purchases";
+  if (source === "purchases") {
+    return "purchases";
+  }
+
+  if (source === "database-users") {
+    return "users";
+  }
+
+  return "checkout";
 }
 
 function getCheckoutConfig() {
@@ -30,6 +38,19 @@ function getCheckoutConfig() {
 }
 
 async function countRotationBase(source) {
+  if (source === "checkout") {
+    const rows = await prisma.$queryRaw`
+      INSERT INTO "CheckoutRotationState" ("key", "count", "updatedAt")
+      VALUES ('checkout_link', 1, NOW())
+      ON CONFLICT ("key") DO UPDATE
+        SET "count" = "CheckoutRotationState"."count" + 1,
+            "updatedAt" = NOW()
+      RETURNING "count"
+    `;
+
+    return Number(rows[0].count) - 1;
+  }
+
   if (source === "users") {
     return prisma.user.count({
       where: {
