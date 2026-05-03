@@ -21,6 +21,7 @@ model User {
   updatedAt         DateTime  @updatedAt
   profile           UserProfile?
   purchases         Purchase[]
+  passwordResetCodes PasswordResetCode[]
 }
 
 model UserProfile {
@@ -39,6 +40,20 @@ model UserProfile {
 
   @@index([role])
   @@index([temporarilyDisabled])
+}
+
+model PasswordResetCode {
+  id        String    @id @default(cuid())
+  userId    String
+  codeHash  String
+  attempts  Int       @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
 }
 
 model Purchase {

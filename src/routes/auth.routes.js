@@ -1,9 +1,11 @@
 const express = require("express");
+const crypto = require("crypto");
 const { z } = require("zod");
 const prisma = require("../lib/prisma");
 const { comparePassword, hashPassword } = require("../lib/password");
 const { signAccessToken } = require("../lib/jwt");
 const { sendDeviceBlockedAlert } = require("../lib/device-block-alert");
+const { sendPasswordResetCodeEmail } = require("../lib/mailer");
 const { requireAuth } = require("../middlewares/auth");
 
 const router = express.Router();
@@ -18,6 +20,26 @@ const changePasswordSchema = z.object({
   currentPassword: z.string().min(6),
   newPassword: z.string().min(8)
 });
+
+const passwordResetRequestSchema = z.object({
+  email: z.string().email()
+});
+
+const passwordResetConfirmSchema = z.object({
+  email: z.string().email(),
+  code: z.string().trim().regex(/^\d{6}$/),
+  newPassword: z.string().min(8)
+});
+
+const PASSWORD_RESET_CODE_TTL_MINUTES = Number(
+  process.env.PASSWORD_RESET_CODE_TTL_MINUTES || 15
+);
+const PASSWORD_RESET_RESEND_SECONDS = Number(
+  process.env.PASSWORD_RESET_RESEND_SECONDS || 60
+);
+const PASSWORD_RESET_MAX_ATTEMPTS = Number(
+  process.env.PASSWORD_RESET_MAX_ATTEMPTS || 5
+);
 
 function roleForApi(role) {
   return String(role || "USER").toLowerCase();
@@ -78,6 +100,30 @@ function authUserResponse(user) {
       requiresDeviceId: shouldEnforceDevice(profile)
     }
   };
+}
+
+function passwordResetGenericResponse() {
+  return {
+    ok: true,
+    message: "Se o email estiver cadastrado, enviaremos um codigo para redefinir a senha."
+  };
+}
+
+function generatePasswordResetCode() {
+  return String(crypto.randomInt(100000, 1000000));
+}
+
+function hashPasswordResetCode(email, code) {
+  const secret = process.env.JWT_SECRET || "password-reset";
+
+  return crypto
+    .createHash("sha256")
+    .update(`${email.toLowerCase()}:${code}:${secret}`)
+    .digest("hex");
+}
+
+function resetCodeExpiresAt() {
+  return new Date(Date.now() + PASSWORD_RESET_CODE_TTL_MINUTES * 60 * 1000);
 }
 
 router.post("/login", async (req, res) => {
@@ -146,6 +192,139 @@ router.post("/login", async (req, res) => {
   return res.json({
     token: signAccessToken({ ...user, role: user.profile?.role || user.role }),
     user: authUserResponse(user)
+  });
+});
+
+router.post("/password-reset/request", async (req, res) => {
+  const parsed = passwordResetRequestSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Informe um email valido." });
+  }
+
+  const email = parsed.data.email.toLowerCase();
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      hasAccess: true,
+      passwordResetCodes: {
+        where: { usedAt: null },
+        orderBy: { createdAt: "desc" },
+        take: 1
+      }
+    }
+  });
+
+  if (!user || !user.hasAccess) {
+    return res.json(passwordResetGenericResponse());
+  }
+
+  const latestCode = user.passwordResetCodes[0];
+  const secondsSinceLatest = latestCode
+    ? (Date.now() - new Date(latestCode.createdAt).getTime()) / 1000
+    : null;
+
+  if (secondsSinceLatest !== null && secondsSinceLatest < PASSWORD_RESET_RESEND_SECONDS) {
+    return res.json(passwordResetGenericResponse());
+  }
+
+  const code = generatePasswordResetCode();
+
+  await prisma.passwordResetCode.create({
+    data: {
+      userId: user.id,
+      codeHash: hashPasswordResetCode(user.email, code),
+      expiresAt: resetCodeExpiresAt()
+    }
+  });
+
+  await sendPasswordResetCodeEmail({
+    to: user.email,
+    name: user.name,
+    code
+  });
+
+  return res.json(passwordResetGenericResponse());
+});
+
+router.post("/password-reset/confirm", async (req, res) => {
+  const parsed = passwordResetConfirmSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: "Informe email, codigo de 6 digitos e nova senha com pelo menos 8 caracteres."
+    });
+  }
+
+  const email = parsed.data.email.toLowerCase();
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: {
+      id: true,
+      email: true,
+      hasAccess: true,
+      passwordResetCodes: {
+        where: {
+          usedAt: null,
+          expiresAt: { gt: new Date() }
+        },
+        orderBy: { createdAt: "desc" },
+        take: 1
+      }
+    }
+  });
+
+  if (!user || !user.hasAccess || !user.passwordResetCodes[0]) {
+    return res.status(400).json({ error: "Codigo invalido ou expirado." });
+  }
+
+  const resetCode = user.passwordResetCodes[0];
+
+  if (resetCode.attempts >= PASSWORD_RESET_MAX_ATTEMPTS) {
+    await prisma.passwordResetCode.update({
+      where: { id: resetCode.id },
+      data: { usedAt: new Date() }
+    });
+
+    return res.status(400).json({ error: "Codigo invalido ou expirado." });
+  }
+
+  const codeHash = hashPasswordResetCode(user.email, parsed.data.code);
+
+  if (codeHash !== resetCode.codeHash) {
+    await prisma.passwordResetCode.update({
+      where: { id: resetCode.id },
+      data: { attempts: { increment: 1 } }
+    });
+
+    return res.status(400).json({ error: "Codigo invalido ou expirado." });
+  }
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await hashPassword(parsed.data.newPassword),
+        temporaryPassword: false
+      }
+    }),
+    prisma.passwordResetCode.updateMany({
+      where: {
+        userId: user.id,
+        usedAt: null
+      },
+      data: {
+        usedAt: new Date()
+      }
+    })
+  ]);
+
+  return res.json({
+    ok: true,
+    message: "Senha alterada com sucesso. Voce ja pode fazer login."
   });
 });
 

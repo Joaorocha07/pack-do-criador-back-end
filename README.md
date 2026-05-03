@@ -31,6 +31,9 @@ Copy-Item .env.example .env
 
 - `DATABASE_URL`: connection string do Neon com `sslmode=require`.
 - `JWT_SECRET`: segredo grande para assinar JWT.
+- `PASSWORD_RESET_CODE_TTL_MINUTES`: tempo de validade do codigo de recuperacao de senha, padrao `15`.
+- `PASSWORD_RESET_RESEND_SECONDS`: intervalo minimo para reenviar codigo, padrao `60`.
+- `PASSWORD_RESET_MAX_ATTEMPTS`: tentativas maximas por codigo, padrao `5`.
 - `CAKTO_WEBHOOK_SECRET`: segredo para proteger o webhook.
 - `CAKTO_PRODUCT_NAME`: nome do produto que deve liberar acesso.
 - `CHECKOUT_AFFILIATE_URL`: link de checkout com afiliada.
@@ -176,6 +179,9 @@ CORS_ORIGINS=https://packdocriador.com,https://www.packdocriador.com
 DATABASE_URL=sua-url-do-neon
 JWT_SECRET=gere-um-novo-segredo-grande
 JWT_EXPIRES_IN=7d
+PASSWORD_RESET_CODE_TTL_MINUTES=15
+PASSWORD_RESET_RESEND_SECONDS=60
+PASSWORD_RESET_MAX_ATTEMPTS=5
 CAKTO_WEBHOOK_SECRET=gere-um-novo-segredo-do-webhook
 ADMIN_IMPORT_SECRET=gere-um-novo-segredo-de-importacao
 CAKTO_PRODUCT_NAME=Pack do Criador
@@ -874,6 +880,99 @@ Authorization: Bearer SEU_TOKEN
   "newPassword": "nova-senha-segura"
 }
 ```
+
+### Recuperar senha por email
+
+Fluxo para usuario que esqueceu a senha:
+
+1. Front envia o email para `POST /auth/password-reset/request`.
+2. Se o email existir e tiver acesso ativo, a API envia um codigo de 6 digitos.
+3. Front envia email, codigo e nova senha para `POST /auth/password-reset/confirm`.
+4. Depois disso, o usuario faz login normalmente em `POST /auth/login`.
+
+#### Solicitar codigo
+
+```bash
+curl -X POST "https://URL-DA-API.up.railway.app/auth/password-reset/request" \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"cliente@email.com\"}"
+```
+
+Resposta sempre generica, para nao revelar se o email existe:
+
+```json
+{
+  "ok": true,
+  "message": "Se o email estiver cadastrado, enviaremos um codigo para redefinir a senha."
+}
+```
+
+#### Confirmar codigo e trocar senha
+
+```bash
+curl -X POST "https://URL-DA-API.up.railway.app/auth/password-reset/confirm" \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"cliente@email.com\",\"code\":\"123456\",\"newPassword\":\"novaSenha123\"}"
+```
+
+Resposta de sucesso:
+
+```json
+{
+  "ok": true,
+  "message": "Senha alterada com sucesso. Voce ja pode fazer login."
+}
+```
+
+Erros comuns:
+
+```json
+{
+  "error": "Codigo invalido ou expirado."
+}
+```
+
+O codigo expira em `PASSWORD_RESET_CODE_TTL_MINUTES`, por padrao 15 minutos. Cada codigo aceita ate `PASSWORD_RESET_MAX_ATTEMPTS`, por padrao 5 tentativas.
+
+#### Exemplo para o frontend
+
+```js
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+
+export async function requestPasswordReset(email) {
+  const response = await fetch(`${apiUrl}/auth/password-reset/request`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email })
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.error || "Nao foi possivel enviar o codigo.");
+  }
+
+  return data;
+}
+
+export async function confirmPasswordReset({ email, code, newPassword }) {
+  const response = await fetch(`${apiUrl}/auth/password-reset/confirm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, code, newPassword })
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.error || "Nao foi possivel alterar a senha.");
+  }
+
+  return data;
+}
+```
+
+No front, crie duas etapas: primeiro uma tela com `email`; depois uma tela com `codigo` e `novaSenha`. Depois de `confirmPasswordReset` responder `ok: true`, redirecione para `/login` e peça para o usuario entrar com a nova senha. O login ainda deve enviar `deviceId`, como ja acontece hoje.
 
 ### `POST /auth/logout`
 

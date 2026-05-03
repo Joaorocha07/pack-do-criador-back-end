@@ -8,7 +8,7 @@
     "start": "node src/server.js",
     "build": "prisma generate",
     "render-build": "prisma generate && prisma db push",
-    "railway-build": "prisma generate",
+    "railway-build": "prisma generate && prisma db push",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio"

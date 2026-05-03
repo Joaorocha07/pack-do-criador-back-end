@@ -160,6 +160,73 @@ async function sendAccessEmail({ to, name, password }) {
   });
 }
 
+async function sendPasswordResetCodeEmail({ to, name, code }) {
+  if (!process.env.MAIL_FROM) {
+    throw new Error("Variavel MAIL_FROM nao configurada.");
+  }
+
+  const transporter = createTransporter();
+  const appUrl = (process.env.APP_URL || "https://packdocriador.com").replace(/\/$/, "");
+  const resetUrl = `${appUrl}/recuperar-senha`;
+  const firstName = name ? name.split(" ")[0] : "tudo bem";
+  const attachments = getLogoAttachment();
+
+  await transporter.sendMail({
+    from: process.env.MAIL_FROM,
+    to,
+    subject: "Codigo para redefinir sua senha",
+    text: [
+      `Ola, ${firstName}!`,
+      "",
+      "Recebemos uma solicitacao para redefinir sua senha no Pack do Criador.",
+      "",
+      `Codigo: ${code}`,
+      "",
+      "Esse codigo expira em 15 minutos.",
+      "Se voce nao pediu essa alteracao, ignore este email.",
+      "",
+      `Acesse: ${resetUrl}`
+    ].join("\n"),
+    html: emailShell({
+      title: "Codigo para redefinir sua senha",
+      preview: "Use este codigo para criar uma nova senha no Pack do Criador.",
+      attachments,
+      content: {
+        header: `
+          <p style="margin:0 0 8px;color:#2563eb;font-size:13px;letter-spacing:3px;text-transform:uppercase;">Redefinir senha</p>
+          <h1 style="margin:0;color:#172033;font-size:26px;line-height:1.25;">Use este codigo para criar uma nova senha</h1>
+        `,
+        body: `
+          <p style="margin:0 0 18px;color:#3a4558;font-size:16px;line-height:1.6;">
+            Ola, ${firstName}! Recebemos uma solicitacao para redefinir sua senha no Pack do Criador.
+          </p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:14px;margin:20px 0;">
+            <tr>
+              <td style="padding:22px;text-align:center;">
+                <p style="margin:0 0 8px;color:#1e3a8a;font-size:13px;">Codigo de verificacao</p>
+                <p style="margin:0;color:#172033;font-size:34px;font-weight:800;letter-spacing:8px;">${code}</p>
+              </td>
+            </tr>
+          </table>
+          <p style="margin:0 0 22px;color:#3a4558;font-size:15px;line-height:1.6;">
+            Esse codigo expira em 15 minutos. Se voce nao pediu essa alteracao, ignore este email.
+          </p>
+          <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto 24px;">
+            <tr>
+              <td bgcolor="#111827" style="border-radius:10px;">
+                <a href="${resetUrl}" style="display:inline-block;padding:15px 28px;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;border-radius:10px;">
+                  Redefinir senha
+                </a>
+              </td>
+            </tr>
+          </table>
+        `
+      }
+    }),
+    attachments
+  });
+}
+
 async function sendDeviceBlockedEmail({ to, name }) {
   if (!process.env.MAIL_FROM) {
     throw new Error("Variavel MAIL_FROM nao configurada.");
@@ -314,4 +381,9 @@ async function sendDeviceResetEmail({ to, name }) {
   });
 }
 
-module.exports = { sendAccessEmail, sendDeviceBlockedEmail, sendDeviceResetEmail };
+module.exports = {
+  sendAccessEmail,
+  sendDeviceBlockedEmail,
+  sendDeviceResetEmail,
+  sendPasswordResetCodeEmail
+};
