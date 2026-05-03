@@ -65,7 +65,7 @@ router.get("/link", async (req, res) => {
   const currentCount = await countRotationBase(config.source);
   const cycleSize = config.affiliateSlots + 1;
   const nextPosition = (currentCount % cycleSize) + 1;
-  const useOwnLink = nextPosition === cycleSize;
+  const useOwnLink = nextPosition === 1;
   const url = useOwnLink ? config.ownUrl : config.affiliateUrl;
 
   if (req.query.redirect === "true") {

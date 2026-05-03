@@ -996,16 +996,16 @@ Endpoint publico, sem JWT, para buscar o link de venda da vez.
 
 Com `CHECKOUT_AFFILIATE_SALES_BEFORE_OWN=3`, o ciclo fica assim:
 
-- posicoes 1, 2 e 3: `CHECKOUT_AFFILIATE_URL`
-- posicao 4: `CHECKOUT_OWN_URL`
-- posicao 5: reinicia no link afiliado
+- posicao 1: `CHECKOUT_OWN_URL`
+- posicoes 2, 3 e 4: `CHECKOUT_AFFILIATE_URL`
+- posicao 5: reinicia no link proprio
 
 Resposta:
 
 ```json
 {
-  "url": "https://pay.cakto.com.br/wjzbfzc_596335?affiliate=6daZPhsr",
-  "target": "affiliate",
+  "url": "https://pay.cakto.com.br/wjzbfzc_596335",
+  "target": "own",
   "source": "purchases",
   "currentCount": 0,
   "nextPosition": 1,
