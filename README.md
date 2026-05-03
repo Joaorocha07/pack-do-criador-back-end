@@ -39,7 +39,9 @@ Copy-Item .env.example .env
 - `CHECKOUT_AFFILIATE_URL`: link de checkout com afiliada.
 - `CHECKOUT_OWN_URL`: link de checkout sem afiliada.
 - `CHECKOUT_ROTATION_SOURCE`: use `purchases` para alternar por vendas registradas ou `users` para alternar por usuarios com acesso.
-- `SMTP_*`: dados do provedor de email.
+- `EMAIL_PROVIDER`: use `brevo-api` na Railway ou `smtp` quando o host permitir SMTP.
+- `BREVO_API_KEY`: chave da API da Brevo para envio HTTPS.
+- `SMTP_*`: dados do provedor de email quando `EMAIL_PROVIDER=smtp`.
 - `APP_URL`: URL do seu frontend/login.
 - `CORS_ORIGINS`: origens permitidas pelo CORS, separadas por virgula. Em producao, inclua `https://packdocriador.com`.
 - `STICKER_STORAGE_DIR`: pasta privada onde as imagens das figurinhas ficam salvas.
@@ -79,12 +81,10 @@ CHECKOUT_AFFILIATE_URL=https://pay.cakto.com.br/wjzbfzc_596335?affiliate=6daZPhs
 CHECKOUT_OWN_URL=https://pay.cakto.com.br/wjzbfzc_596335
 CHECKOUT_AFFILIATE_SALES_BEFORE_OWN=3
 CHECKOUT_ROTATION_SOURCE=purchases
-SMTP_HOST=smtp-relay.brevo.com
-SMTP_PORT=2525
-SMTP_SECURE=false
-SMTP_USER=seu-login-smtp-da-brevo
-SMTP_PASS=sua-smtp-key-da-brevo
+EMAIL_PROVIDER=brevo-api
+BREVO_API_KEY=sua-api-key-da-brevo
 MAIL_FROM=Pack do Criador <email-validado-na-brevo@seudominio.com>
+SUPPORT_EMAIL=packdocriador1@gmail.com
 STICKER_STORAGE_DIR=./.private/stickers
 STICKER_UPLOAD_MAX_IMAGE_MB=20
 STICKER_UPLOAD_MAX_FILES=1000
@@ -128,25 +128,26 @@ Depois faca deploy novamente. As imagens enviadas depois dessa configuracao fica
 
 ### Envio de email com Brevo
 
-O backend usa Nodemailer com SMTP, entao nao precisa instalar SDK da Brevo.
-
 No painel da Brevo:
 
-1. Ative emails transacionais/SMTP.
-2. Crie ou copie suas credenciais em **SMTP & API > SMTP**.
-3. Use o **SMTP login** em `SMTP_USER`.
-4. Use uma **SMTP key** em `SMTP_PASS`. Nao use API key nem a senha da conta Brevo.
+1. Ative emails transacionais.
+2. Crie uma API key em **SMTP & API > API Keys**.
+3. Configure `EMAIL_PROVIDER=brevo-api`.
+4. Configure `BREVO_API_KEY` com a API key criada.
 5. Valide o remetente ou autentique o dominio. O email de `MAIL_FROM` precisa ser um remetente aceito pela Brevo.
 
-Para Render Free, use a porta `2525`, porque portas SMTP comuns como `587` e `465` podem ser bloqueadas pela hospedagem:
+Na Railway, prefira API HTTPS porque portas SMTP podem dar timeout. Para SMTP em outro host, use:
 
 ```text
+EMAIL_PROVIDER=smtp
 SMTP_HOST=smtp-relay.brevo.com
 SMTP_PORT=2525
 SMTP_SECURE=false
+SMTP_USER=seu-login-smtp-da-brevo
+SMTP_PASS=sua-smtp-key-da-brevo
 ```
 
-Se voce estiver em uma instancia paga e quiser usar a porta padrao da Brevo, tambem pode usar `SMTP_PORT=587` com `SMTP_SECURE=false`.
+Se voce estiver em uma instancia que permita SMTP, tambem pode usar `SMTP_PORT=587` com `SMTP_SECURE=false`.
 
 Depois que o Render gerar a URL, teste:
 
@@ -191,11 +192,8 @@ CHECKOUT_AFFILIATE_URL=https://pay.cakto.com.br/wjzbfzc_596335?affiliate=6daZPhs
 CHECKOUT_OWN_URL=https://pay.cakto.com.br/wjzbfzc_596335
 CHECKOUT_AFFILIATE_SALES_BEFORE_OWN=3
 CHECKOUT_ROTATION_SOURCE=purchases
-SMTP_HOST=smtp-relay.brevo.com
-SMTP_PORT=2525
-SMTP_SECURE=false
-SMTP_USER=seu-login-smtp-da-brevo
-SMTP_PASS=sua-smtp-key-da-brevo
+EMAIL_PROVIDER=brevo-api
+BREVO_API_KEY=sua-api-key-da-brevo
 MAIL_FROM=Pack do Criador <email-validado-na-brevo@seudominio.com>
 SUPPORT_EMAIL=packdocriador1@gmail.com
 STICKER_STORAGE_DRIVER=r2
@@ -260,7 +258,7 @@ Teste estes fluxos antes de desligar o Render:
 - `GET /checkout/link`.
 - Webhook real ou teste da Cakto em `/webhooks/cakto`.
 
-Como segredos foram expostos fora do ambiente, rotacione antes de colocar a Railway em producao: JWT, R2, Cakto, SMTP e, se possivel, a credencial do Neon.
+Como segredos foram expostos fora do ambiente, rotacione antes de colocar a Railway em producao: JWT, R2, Cakto, Brevo/SMTP e, se possivel, a credencial do Neon.
 
 ## Importar compradores antigos da Cakto
 

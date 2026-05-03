@@ -24,6 +24,87 @@ function createTransporter() {
   });
 }
 
+function emailProvider() {
+  return String(process.env.EMAIL_PROVIDER || (process.env.BREVO_API_KEY ? "brevo-api" : "smtp"))
+    .trim()
+    .toLowerCase();
+}
+
+function parseMailFrom() {
+  const mailFrom = process.env.MAIL_FROM;
+
+  if (!mailFrom) {
+    throw new Error("Variavel MAIL_FROM nao configurada.");
+  }
+
+  const match = mailFrom.match(/^\s*"?([^"<]*)"?\s*<([^>]+)>\s*$/);
+
+  if (match) {
+    return {
+      name: match[1].trim() || undefined,
+      email: match[2].trim()
+    };
+  }
+
+  return {
+    email: mailFrom.trim()
+  };
+}
+
+async function sendWithBrevoApi({ to, subject, text, html }) {
+  const apiKey = process.env.BREVO_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("Variavel BREVO_API_KEY nao configurada.");
+  }
+
+  const sender = parseMailFrom();
+  const content = html
+    ? { htmlContent: html }
+    : { textContent: text };
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "api-key": apiKey,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      sender,
+      to: [{ email: to }],
+      subject,
+      ...content
+    })
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`Falha ao enviar email pela Brevo API: ${response.status} ${body}`);
+  }
+}
+
+async function sendMail({ to, subject, text, html, attachments }) {
+  if (!process.env.MAIL_FROM) {
+    throw new Error("Variavel MAIL_FROM nao configurada.");
+  }
+
+  if (emailProvider() === "brevo-api") {
+    await sendWithBrevoApi({ to, subject, text, html });
+    return;
+  }
+
+  const transporter = createTransporter();
+
+  await transporter.sendMail({
+    from: process.env.MAIL_FROM,
+    to,
+    subject,
+    text,
+    html,
+    attachments
+  });
+}
+
 function emailShell({ title, preview, content, attachments }) {
   return `
     <!doctype html>
@@ -67,6 +148,10 @@ function emailShell({ title, preview, content, attachments }) {
 }
 
 function getLogoAttachment() {
+  if (emailProvider() === "brevo-api") {
+    return [];
+  }
+
   const logoPath = path.resolve(process.cwd(), "android-chrome-512x512.png");
 
   if (!fs.existsSync(logoPath)) {
@@ -91,14 +176,12 @@ async function sendAccessEmail({ to, name, password }) {
     throw new Error("Variavel MAIL_FROM nao configurada.");
   }
 
-  const transporter = createTransporter();
   const appUrl = (process.env.APP_URL || "https://packdocriador.com").replace(/\/$/, "");
   const loginUrl = `${appUrl}/login`;
   const firstName = name ? name.split(" ")[0] : "tudo bem";
   const attachments = getLogoAttachment();
 
-  await transporter.sendMail({
-    from: process.env.MAIL_FROM,
+  await sendMail({
     to,
     subject: "Seu acesso ao Pack do Criador",
     text: [
@@ -165,14 +248,12 @@ async function sendPasswordResetCodeEmail({ to, name, code }) {
     throw new Error("Variavel MAIL_FROM nao configurada.");
   }
 
-  const transporter = createTransporter();
   const appUrl = (process.env.APP_URL || "https://packdocriador.com").replace(/\/$/, "");
   const resetUrl = `${appUrl}/recuperar-senha`;
   const firstName = name ? name.split(" ")[0] : "tudo bem";
   const attachments = getLogoAttachment();
 
-  await transporter.sendMail({
-    from: process.env.MAIL_FROM,
+  await sendMail({
     to,
     subject: "Codigo para redefinir sua senha",
     text: [
@@ -232,7 +313,6 @@ async function sendDeviceBlockedEmail({ to, name }) {
     throw new Error("Variavel MAIL_FROM nao configurada.");
   }
 
-  const transporter = createTransporter();
   const appUrl = (process.env.APP_URL || "https://packdocriador.com").replace(/\/$/, "");
   const loginUrl = `${appUrl}/login`;
   const firstName = name ? name.split(" ")[0] : "tudo bem";
@@ -252,8 +332,7 @@ async function sendDeviceBlockedEmail({ to, name }) {
   );
   const resetMailto = `mailto:${resetEmail}?subject=${resetSubject}&body=${resetBody}`;
 
-  await transporter.sendMail({
-    from: process.env.MAIL_FROM,
+  await sendMail({
     to,
     subject: "Tentativa de acesso bloqueada no Pack do Criador",
     text: [
@@ -317,15 +396,13 @@ async function sendDeviceResetEmail({ to, name }) {
     throw new Error("Variavel MAIL_FROM nao configurada.");
   }
 
-  const transporter = createTransporter();
   const appUrl = (process.env.APP_URL || "https://packdocriador.com").replace(/\/$/, "");
   const loginUrl = `${appUrl}/login`;
   const firstName = name ? name.split(" ")[0] : "tudo bem";
   const attachments = getLogoAttachment();
   const resetEmail = supportEmail();
 
-  await transporter.sendMail({
-    from: process.env.MAIL_FROM,
+  await sendMail({
     to,
     subject: "Seu aparelho foi resetado no Pack do Criador",
     text: [
