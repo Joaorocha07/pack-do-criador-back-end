@@ -79,8 +79,8 @@ CAKTO_CLIENT_ID=client-id-da-cakto
 CAKTO_CLIENT_SECRET=client-secret-da-cakto
 CHECKOUT_AFFILIATE_URL=https://pay.cakto.com.br/wjzbfzc_596335?affiliate=6daZPhsr
 CHECKOUT_OWN_URL=https://pay.cakto.com.br/wjzbfzc_596335
-CHECKOUT_AFFILIATE_SALES_BEFORE_OWN=3
-CHECKOUT_ROTATION_SOURCE=purchases
+CHECKOUT_AFFILIATE_USERS_BEFORE_OWN=3
+CHECKOUT_ROTATION_SOURCE=users
 EMAIL_PROVIDER=brevo-api
 BREVO_API_KEY=sua-api-key-da-brevo
 MAIL_FROM=Pack do Criador <email-validado-na-brevo@seudominio.com>
@@ -190,8 +190,8 @@ CAKTO_CLIENT_ID=client-id-da-cakto
 CAKTO_CLIENT_SECRET=client-secret-da-cakto
 CHECKOUT_AFFILIATE_URL=https://pay.cakto.com.br/wjzbfzc_596335?affiliate=6daZPhsr
 CHECKOUT_OWN_URL=https://pay.cakto.com.br/wjzbfzc_596335
-CHECKOUT_AFFILIATE_SALES_BEFORE_OWN=3
-CHECKOUT_ROTATION_SOURCE=purchases
+CHECKOUT_AFFILIATE_USERS_BEFORE_OWN=3
+CHECKOUT_ROTATION_SOURCE=users
 EMAIL_PROVIDER=brevo-api
 BREVO_API_KEY=sua-api-key-da-brevo
 MAIL_FROM=Pack do Criador <email-validado-na-brevo@seudominio.com>
@@ -994,19 +994,19 @@ Depois do logout, remova o token salvo no front.
 
 Endpoint publico, sem JWT, para buscar o link de venda da vez.
 
-Com `CHECKOUT_AFFILIATE_SALES_BEFORE_OWN=3`, o ciclo fica assim:
+Com `CHECKOUT_ROTATION_SOURCE=users` e `CHECKOUT_AFFILIATE_USERS_BEFORE_OWN=3`, o ciclo por usuarios novos fica assim:
 
-- posicao 1: `CHECKOUT_OWN_URL`
-- posicoes 2, 3 e 4: `CHECKOUT_AFFILIATE_URL`
-- posicao 5: reinicia no link proprio
+- usuarios novos 1, 2 e 3: `CHECKOUT_AFFILIATE_URL`
+- usuario novo 4: `CHECKOUT_OWN_URL`
+- usuario novo 5: reinicia no link afiliado
 
 Resposta:
 
 ```json
 {
-  "url": "https://pay.cakto.com.br/wjzbfzc_596335",
-  "target": "own",
-  "source": "purchases",
+  "url": "https://pay.cakto.com.br/wjzbfzc_596335?affiliate=6daZPhsr",
+  "target": "affiliate",
+  "source": "users",
   "currentCount": 0,
   "nextPosition": 1,
   "cycleSize": 4,

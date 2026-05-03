@@ -9,7 +9,7 @@ function parsePositiveInt(value, fallback) {
 }
 
 function getRotationSource() {
-  const source = String(process.env.CHECKOUT_ROTATION_SOURCE || "purchases")
+  const source = String(process.env.CHECKOUT_ROTATION_SOURCE || "users")
     .trim()
     .toLowerCase();
 
@@ -21,7 +21,8 @@ function getCheckoutConfig() {
     affiliateUrl: process.env.CHECKOUT_AFFILIATE_URL,
     ownUrl: process.env.CHECKOUT_OWN_URL,
     affiliateSlots: parsePositiveInt(
-      process.env.CHECKOUT_AFFILIATE_SALES_BEFORE_OWN,
+      process.env.CHECKOUT_AFFILIATE_USERS_BEFORE_OWN ||
+        process.env.CHECKOUT_AFFILIATE_SALES_BEFORE_OWN,
       3
     ),
     source: getRotationSource()
@@ -53,6 +54,10 @@ async function countRotationBase(source) {
 }
 
 router.get("/link", async (req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+
   const config = getCheckoutConfig();
 
   if (!config.affiliateUrl || !config.ownUrl) {
@@ -65,7 +70,7 @@ router.get("/link", async (req, res) => {
   const currentCount = await countRotationBase(config.source);
   const cycleSize = config.affiliateSlots + 1;
   const nextPosition = (currentCount % cycleSize) + 1;
-  const useOwnLink = nextPosition === 1;
+  const useOwnLink = nextPosition === cycleSize;
   const url = useOwnLink ? config.ownUrl : config.affiliateUrl;
 
   if (req.query.redirect === "true") {
