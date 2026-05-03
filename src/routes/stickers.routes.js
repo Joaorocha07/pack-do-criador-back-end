@@ -3,7 +3,9 @@ const prisma = require("../lib/prisma");
 const { requireActiveAccess, requireAuth } = require("../middlewares/auth");
 const {
   getStickerFile,
+  publicStickerFileUrl,
   safeContentDisposition,
+  shouldRedirectStickerDelivery,
   stickerDownloadUrl,
   stickerImageUrl
 } = require("../lib/sticker-storage");
@@ -158,6 +160,15 @@ async function sendImage(req, res, disposition) {
 
   if (!image) {
     return res.status(404).json({ error: "Imagem nao encontrada." });
+  }
+
+  if (shouldRedirectStickerDelivery()) {
+    const publicUrl = publicStickerFileUrl(image.storageKey);
+
+    if (publicUrl) {
+      res.setHeader("Cache-Control", "private, max-age=60");
+      return res.redirect(302, publicUrl);
+    }
   }
 
   const storedFile = await getStickerFile(image.storageKey);

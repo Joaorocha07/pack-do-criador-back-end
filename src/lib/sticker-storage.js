@@ -79,6 +79,32 @@ function stickerDownloadUrl(imageId) {
   return `/stickers/images/${imageId}/download`;
 }
 
+function stickerDeliveryMode() {
+  return String(process.env.STICKER_DELIVERY_MODE || "proxy").trim().toLowerCase();
+}
+
+function encodeStorageKey(storageKey) {
+  return String(storageKey || "")
+    .split("/")
+    .filter(Boolean)
+    .map(encodeURIComponent)
+    .join("/");
+}
+
+function publicStickerFileUrl(storageKey) {
+  const publicBaseUrl = String(process.env.R2_PUBLIC_BASE_URL || "").trim().replace(/\/$/, "");
+
+  if (!publicBaseUrl || !storageKey) {
+    return null;
+  }
+
+  return `${publicBaseUrl}/${encodeStorageKey(storageKey)}`;
+}
+
+function shouldRedirectStickerDelivery() {
+  return storageDriver() === "r2" && stickerDeliveryMode() === "redirect";
+}
+
 function safeContentDisposition(type, originalName) {
   const fallbackName = String(originalName || "sticker")
     .replace(/[\\/\r\n"]/g, "_")
@@ -273,6 +299,8 @@ module.exports = {
   deleteStickerFile,
   getStorageUsageFromProvider,
   getStickerFile,
+  publicStickerFileUrl,
+  shouldRedirectStickerDelivery,
   storageProviderName,
   resolveStoragePath,
   safeContentDisposition,

@@ -16,7 +16,38 @@ const { requireAdmin, requireAuth } = require("./middlewares/auth");
 
 const app = express();
 
-app.use(cors());
+function normalizeOrigin(origin) {
+  return String(origin || "").trim().replace(/\/$/, "");
+}
+
+function allowedOrigins() {
+  return [
+    process.env.APP_URL,
+    process.env.FRONTEND_URL,
+    ...(process.env.CORS_ORIGINS || "").split(",")
+  ]
+    .map(normalizeOrigin)
+    .filter(Boolean);
+}
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      const normalizedOrigin = normalizeOrigin(origin);
+      const origins = allowedOrigins();
+
+      if (!origins.length || origins.includes(normalizedOrigin)) {
+        return callback(null, true);
+      }
+
+      return callback(null, false);
+    }
+  })
+);
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (_req, res) => {

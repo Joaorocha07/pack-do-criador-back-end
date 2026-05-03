@@ -38,10 +38,12 @@ Copy-Item .env.example .env
 - `CHECKOUT_ROTATION_SOURCE`: use `purchases` para alternar por vendas registradas ou `users` para alternar por usuarios com acesso.
 - `SMTP_*`: dados do provedor de email.
 - `APP_URL`: URL do seu frontend/login.
+- `CORS_ORIGINS`: origens permitidas pelo CORS, separadas por virgula. Em producao, inclua `https://packdocriador.com`.
 - `STICKER_STORAGE_DIR`: pasta privada onde as imagens das figurinhas ficam salvas.
 - `STICKER_UPLOAD_MAX_IMAGE_MB`: limite por imagem, padrao `20`.
 - `STICKER_UPLOAD_MAX_FILES`: limite de arquivos por upload, padrao `1000`.
 - `STICKER_UPLOAD_MAX_REQUEST_MB`: limite total do multipart, padrao `512`.
+- `STICKER_DELIVERY_MODE`: use `proxy` para a API fazer stream das imagens ou `redirect` para redirecionar para uma URL publica/Worker do R2 depois de validar o usuario.
 
 > Na Vercel, Functions tem limite de payload de 4.5MB por request. Se este backend estiver rodando na Vercel, configure `STICKER_UPLOAD_MAX_IMAGE_MB=4` e `STICKER_UPLOAD_MAX_REQUEST_MB=4`, ou envie as figurinhas em lotes menores pelo frontend. Requests maiores sao barrados pela propria Vercel antes de chegar no Express.
 > Para figurinhas protegidas em producao, prefira uma hospedagem com disco persistente ou um storage externo. O `STICKER_STORAGE_DIR` local nao e uma boa base duravel para arquivos enviados em Functions serverless.
@@ -154,6 +156,105 @@ Se responder `{ "ok": true }`, configure na Cakto:
 ```text
 https://URL-GERADA-PELO-RENDER/webhooks/cakto?secret=SEU_CAKTO_WEBHOOK_SECRET
 ```
+
+## Deploy na Railway
+
+Crie um projeto na Railway apontando para este repositorio.
+
+Use estas configuracoes:
+
+```text
+Build Command: npm run railway-build
+Start Command: npm start
+```
+
+Configure as variaveis do ambiente de producao na Railway. Para este projeto, o conjunto minimo esperado e:
+
+```text
+APP_URL=https://packdocriador.com
+CORS_ORIGINS=https://packdocriador.com,https://www.packdocriador.com
+DATABASE_URL=sua-url-do-neon
+JWT_SECRET=gere-um-novo-segredo-grande
+JWT_EXPIRES_IN=7d
+CAKTO_WEBHOOK_SECRET=gere-um-novo-segredo-do-webhook
+ADMIN_IMPORT_SECRET=gere-um-novo-segredo-de-importacao
+CAKTO_PRODUCT_NAME=Pack do Criador
+CAKTO_CLIENT_ID=client-id-da-cakto
+CAKTO_CLIENT_SECRET=client-secret-da-cakto
+CHECKOUT_AFFILIATE_URL=https://pay.cakto.com.br/wjzbfzc_596335?affiliate=6daZPhsr
+CHECKOUT_OWN_URL=https://pay.cakto.com.br/wjzbfzc_596335
+CHECKOUT_AFFILIATE_SALES_BEFORE_OWN=3
+CHECKOUT_ROTATION_SOURCE=purchases
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=2525
+SMTP_SECURE=false
+SMTP_USER=seu-login-smtp-da-brevo
+SMTP_PASS=sua-smtp-key-da-brevo
+MAIL_FROM=Pack do Criador <email-validado-na-brevo@seudominio.com>
+SUPPORT_EMAIL=packdocriador1@gmail.com
+STICKER_STORAGE_DRIVER=r2
+STICKER_UPLOAD_MAX_IMAGE_MB=20
+STICKER_UPLOAD_MAX_FILES=1000
+STICKER_UPLOAD_MAX_REQUEST_MB=512
+STICKER_STORAGE_MAX_MB=9500
+R2_ACCOUNT_ID=seu-account-id
+R2_BUCKET=pack-do-criador-stickers
+R2_ACCESS_KEY_ID=access-key-id-rotacionado
+R2_SECRET_ACCESS_KEY=secret-access-key-rotacionado
+```
+
+Nao configure `PORT`; a Railway injeta essa variavel automaticamente.
+
+Depois do deploy, teste:
+
+```text
+https://URL-DA-API.up.railway.app/health
+https://URL-DA-API.up.railway.app/health/db
+```
+
+Quando os health checks responderem, configure no frontend:
+
+```text
+BACKEND_API_URL=https://URL-DA-API.up.railway.app
+```
+
+Atualize tambem o webhook da Cakto para a nova API:
+
+```text
+https://URL-DA-API.up.railway.app/webhooks/cakto?secret=SEU_CAKTO_WEBHOOK_SECRET
+```
+
+### Entrega das imagens via R2 ou Worker
+
+Por padrao, as URLs de figurinhas continuam protegidas e a API faz stream do arquivo:
+
+```text
+STICKER_DELIVERY_MODE=proxy
+```
+
+Se voce criar um dominio publico controlado no R2 ou um Cloudflare Worker para entregar objetos, pode reduzir trafego da Railway:
+
+```text
+STICKER_DELIVERY_MODE=redirect
+R2_PUBLIC_BASE_URL=https://imagens.seudominio.com
+```
+
+Nesse modo, a API ainda valida JWT, acesso ativo e aparelho antes de responder. Depois disso, ela redireciona para `R2_PUBLIC_BASE_URL` com o caminho do objeto. Se o bucket ficar publico, qualquer pessoa com a URL final pode abrir o arquivo; para manter protecao forte, use um Worker com URLs temporarias ou validacao propria.
+
+### Checklist pos-migracao
+
+Teste estes fluxos antes de desligar o Render:
+
+- `GET /health` e `GET /health/db`.
+- Login e `GET /auth/me`.
+- Area de membros no frontend em `https://packdocriador.com`.
+- `GET /stickers/categories`.
+- Listagem, visualizacao e download de figurinhas.
+- Upload admin em `/admin/stickers/categories/:id/images`.
+- `GET /checkout/link`.
+- Webhook real ou teste da Cakto em `/webhooks/cakto`.
+
+Como segredos foram expostos fora do ambiente, rotacione antes de colocar a Railway em producao: JWT, R2, Cakto, SMTP e, se possivel, a credencial do Neon.
 
 ## Importar compradores antigos da Cakto
 
