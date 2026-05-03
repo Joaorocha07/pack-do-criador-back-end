@@ -109,6 +109,15 @@ function passwordResetGenericResponse() {
   };
 }
 
+function maskEmail(email) {
+  if (!email || !email.includes("@")) {
+    return "email-invalido";
+  }
+
+  const [name, domain] = email.split("@");
+  return `${name.slice(0, 2)}***@${domain}`;
+}
+
 function generatePasswordResetCode() {
   return String(crypto.randomInt(100000, 1000000));
 }
@@ -219,6 +228,11 @@ router.post("/password-reset/request", async (req, res) => {
   });
 
   if (!user || !user.hasAccess) {
+    console.log("[auth:password-reset] Codigo nao enviado.", {
+      email: maskEmail(email),
+      reason: user ? "usuario-sem-acesso" : "usuario-nao-encontrado"
+    });
+
     return res.json(passwordResetGenericResponse());
   }
 
@@ -228,16 +242,23 @@ router.post("/password-reset/request", async (req, res) => {
     : null;
 
   if (secondsSinceLatest !== null && secondsSinceLatest < PASSWORD_RESET_RESEND_SECONDS) {
+    console.log("[auth:password-reset] Codigo nao reenviado por intervalo minimo.", {
+      email: maskEmail(email),
+      secondsSinceLatest: Number(secondsSinceLatest.toFixed(1)),
+      resendSeconds: PASSWORD_RESET_RESEND_SECONDS
+    });
+
     return res.json(passwordResetGenericResponse());
   }
 
   const code = generatePasswordResetCode();
+  const expiresAt = resetCodeExpiresAt();
 
   await prisma.passwordResetCode.create({
     data: {
       userId: user.id,
       codeHash: hashPasswordResetCode(user.email, code),
-      expiresAt: resetCodeExpiresAt()
+      expiresAt
     }
   });
 
@@ -245,6 +266,11 @@ router.post("/password-reset/request", async (req, res) => {
     to: user.email,
     name: user.name,
     code
+  });
+
+  console.log("[auth:password-reset] Codigo enviado.", {
+    email: maskEmail(user.email),
+    expiresAt: expiresAt.toISOString()
   });
 
   return res.json(passwordResetGenericResponse());
