@@ -7,8 +7,8 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "build": "prisma generate",
-    "render-build": "prisma generate && prisma db push",
-    "railway-build": "prisma generate && prisma db push",
+    "render-build": "prisma generate && prisma db push --accept-data-loss",
+    "railway-build": "prisma generate && prisma db push --accept-data-loss",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio"

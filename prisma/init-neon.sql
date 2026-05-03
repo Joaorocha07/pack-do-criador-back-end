@@ -34,9 +34,6 @@ CREATE TABLE IF NOT EXISTS "UserProfile" (
   "temporarilyDisabled" BOOLEAN NOT NULL DEFAULT false,
   "disabledUntil" TIMESTAMP(3),
   "disabledReason" TEXT,
-  "deviceId" TEXT,
-  "deviceBoundAt" TIMESTAMP(3),
-  "deviceBlockedEmailSentAt" TIMESTAMP(3),
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -48,13 +45,13 @@ CREATE INDEX IF NOT EXISTS "UserProfile_role_idx" ON "UserProfile"("role");
 CREATE INDEX IF NOT EXISTS "UserProfile_temporarilyDisabled_idx" ON "UserProfile"("temporarilyDisabled");
 
 ALTER TABLE "UserProfile"
-ADD COLUMN IF NOT EXISTS "deviceId" TEXT;
+DROP COLUMN IF EXISTS "deviceId";
 
 ALTER TABLE "UserProfile"
-ADD COLUMN IF NOT EXISTS "deviceBoundAt" TIMESTAMP(3);
+DROP COLUMN IF EXISTS "deviceBoundAt";
 
 ALTER TABLE "UserProfile"
-ADD COLUMN IF NOT EXISTS "deviceBlockedEmailSentAt" TIMESTAMP(3);
+DROP COLUMN IF EXISTS "deviceBlockedEmailSentAt";
 
 DO $$
 BEGIN

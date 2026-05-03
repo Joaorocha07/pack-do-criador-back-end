@@ -31,9 +31,6 @@ model UserProfile {
   temporarilyDisabled   Boolean   @default(false)
   disabledUntil         DateTime?
   disabledReason        String?
-  deviceId              String?
-  deviceBoundAt         DateTime?
-  deviceBlockedEmailSentAt DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)

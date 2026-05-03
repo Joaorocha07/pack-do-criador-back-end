@@ -243,7 +243,7 @@ STICKER_DELIVERY_MODE=redirect
 R2_PUBLIC_BASE_URL=https://imagens.seudominio.com
 ```
 
-Nesse modo, a API ainda valida JWT, acesso ativo e aparelho antes de responder. Depois disso, ela redireciona para `R2_PUBLIC_BASE_URL` com o caminho do objeto. Se o bucket ficar publico, qualquer pessoa com a URL final pode abrir o arquivo; para manter protecao forte, use um Worker com URLs temporarias ou validacao propria.
+Nesse modo, a API ainda valida JWT e acesso ativo antes de responder. Depois disso, ela redireciona para `R2_PUBLIC_BASE_URL` com o caminho do objeto. Se o bucket ficar publico, qualquer pessoa com a URL final pode abrir o arquivo; para manter protecao forte, use um Worker com URLs temporarias ou validacao propria.
 
 ### Checklist pos-migracao
 
@@ -366,12 +366,7 @@ Retorna:
         "roleLabel": "user",
         "temporarilyDisabled": false,
         "disabledUntil": null,
-        "disabledReason": null,
-        "deviceId": "DEVICE_ID_DO_USUARIO",
-        "deviceBoundAt": "2026-05-01T00:00:00.000Z",
-        "deviceBlockedEmailSentAt": null,
-        "deviceBound": true,
-        "requiresDeviceId": true
+        "disabledReason": null
       }
     },
     {
@@ -466,62 +461,6 @@ Body:
 ```
 
 Retorna `{ "ok": true, "message": "Senha do perfil atualizada.", "user": { ... } }`.
-
-### Admin: alterar aparelho vinculado
-
-```http
-PATCH https://URL-GERADA-PELO-RENDER/admin/users/USER_ID/device
-Content-Type: application/json
-Authorization: Bearer SEU_TOKEN_ADMIN
-```
-
-Body:
-
-```json
-{
-  "deviceId": "DEVICE_ID_NOVO"
-}
-```
-
-Retorna `{ "ok": true, "message": "Aparelho do perfil atualizado.", "user": { ... } }`.
-
-### Admin: resetar aparelho vinculado
-
-```http
-DELETE https://URL-GERADA-PELO-RENDER/admin/users/USER_ID/device
-Authorization: Bearer SEU_TOKEN_ADMIN
-```
-
-Retorna `{ "ok": true, "message": "Vinculo de aparelho resetado.", "user": { ... } }`. No proximo login/acesso do perfil `user`, o primeiro `deviceId` enviado vira o aparelho vinculado. A API tambem envia um email avisando que o aparelho foi resetado e que o proximo login deve ser feito no aparelho/navegador que a pessoa quer manter cadastrado.
-
-### Login com ID do aparelho
-
-Perfis `user` precisam enviar o mesmo `deviceId` no login e nas chamadas protegidas. O front pode gerar um UUID uma vez e salvar em `localStorage`.
-
-```http
-POST https://URL-GERADA-PELO-RENDER/auth/login
-Content-Type: application/json
-x-device-id: DEVICE_ID_DO_APARELHO
-```
-
-Body:
-
-```json
-{
-  "email": "cliente@email.com",
-  "password": "senha-do-cliente",
-  "deviceId": "DEVICE_ID_DO_APARELHO"
-}
-```
-
-Em chamadas protegidas do usuario, envie:
-
-```http
-Authorization: Bearer SEU_TOKEN
-x-device-id: DEVICE_ID_DO_APARELHO
-```
-
-Se o perfil `user` tentar acessar de outro aparelho, a API retorna `403` e envia um email explicando que a conta so pode ser acessada no aparelho e navegador cadastrados. O email orienta a pedir reset em `SUPPORT_EMAIL`, por padrao `packdocriador1@gmail.com`. O reenvio desse aviso respeita `DEVICE_BLOCK_ALERT_INTERVAL_MINUTES`, padrao `60`.
 
 ### Enviar email de acesso manualmente
 
@@ -970,7 +909,7 @@ export async function confirmPasswordReset({ email, code, newPassword }) {
 }
 ```
 
-No front, crie duas etapas: primeiro uma tela com `email`; depois uma tela com `codigo` e `novaSenha`. Depois de `confirmPasswordReset` responder `ok: true`, redirecione para `/login` e peça para o usuario entrar com a nova senha. O login ainda deve enviar `deviceId`, como ja acontece hoje.
+No front, crie duas etapas: primeiro uma tela com `email`; depois uma tela com `codigo` e `novaSenha`. Depois de `confirmPasswordReset` responder `ok: true`, redirecione para `/login` e peça para o usuario entrar com a nova senha.
 
 ### `POST /auth/logout`
 
@@ -1046,3 +985,4 @@ O arquivo `src/routes/cakto.routes.js` tenta ler campos comuns como:
 
 Quando voce pegar o exemplo oficial do webhook da Cakto, ajuste a funcao `mapCaktoPayload` se os nomes forem diferentes.
 # pack-do-criador-back-end
+

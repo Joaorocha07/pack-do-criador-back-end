@@ -3,7 +3,7 @@ const { z } = require("zod");
 const prisma = require("../lib/prisma");
 const { listCaktoOrders } = require("../lib/cakto-api");
 const { generateTemporaryPassword, hashPassword } = require("../lib/password");
-const { sendAccessEmail, sendDeviceResetEmail } = require("../lib/mailer");
+const { sendAccessEmail } = require("../lib/mailer");
 const { requireAdmin, requireAuth } = require("../middlewares/auth");
 
 const router = express.Router();
@@ -29,10 +29,6 @@ const passwordUpdateSchema = z.object({
   temporaryPassword: z.boolean().optional()
 });
 
-const deviceUpdateSchema = z.object({
-  deviceId: z.string().trim().min(8).max(255)
-});
-
 const affiliateImportSchema = z.object({
   affiliates: z.array(
     z.object({
@@ -51,10 +47,6 @@ function normalize(value) {
 
 function roleForApi(role) {
   return String(role || "USER").toLowerCase();
-}
-
-function shouldEnforceDevice(profile) {
-  return roleForApi(profile?.role) === "user";
 }
 
 function profileStatus(profile) {
@@ -120,12 +112,7 @@ function userResponse(user) {
       roleLabel: roleForApi(profile.role),
       temporarilyDisabled: status.temporarilyDisabled,
       disabledUntil: status.disabledUntil,
-      disabledReason: status.disabledReason,
-      deviceId: profile.deviceId || null,
-      deviceBoundAt: profile.deviceBoundAt || null,
-      deviceBlockedEmailSentAt: profile.deviceBlockedEmailSentAt || null,
-      deviceBound: Boolean(profile.deviceId),
-      requiresDeviceId: shouldEnforceDevice(profile)
+      disabledReason: status.disabledReason
     }
   };
 }
@@ -176,12 +163,7 @@ function affiliateResponse({ commissionedUser, commission, order }) {
       roleLabel: "afiliado",
       temporarilyDisabled: false,
       disabledUntil: null,
-      disabledReason: null,
-      deviceId: null,
-      deviceBoundAt: null,
-      deviceBlockedEmailSentAt: null,
-      deviceBound: false,
-      requiresDeviceId: false
+      disabledReason: null
     }
   };
 }
@@ -691,86 +673,6 @@ router.patch("/users/:id/password", async (req, res) => {
     ok: true,
     message: "Senha do perfil atualizada.",
     user: userResponse(updatedUser)
-  });
-});
-
-router.patch("/users/:id/device", async (req, res) => {
-  const parsed = deviceUpdateSchema.safeParse(req.body);
-
-  if (!parsed.success) {
-    return res.status(400).json({
-      error: "Informe deviceId com no minimo 8 caracteres."
-    });
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: req.params.id },
-    include: { profile: true }
-  });
-
-  if (!user) {
-    return res.status(404).json({ error: "Usuario nao encontrado." });
-  }
-
-  const profile = await prisma.userProfile.upsert({
-    where: { userId: user.id },
-    create: {
-      userId: user.id,
-      role: user.role || "USER",
-      deviceId: parsed.data.deviceId,
-      deviceBoundAt: new Date()
-    },
-    update: {
-      deviceId: parsed.data.deviceId,
-      deviceBoundAt: new Date()
-    }
-  });
-
-  return res.json({
-    ok: true,
-    message: "Aparelho do perfil atualizado.",
-    user: userResponse({ ...user, profile })
-  });
-});
-
-router.delete("/users/:id/device", async (req, res) => {
-  const user = await prisma.user.findUnique({
-    where: { id: req.params.id },
-    include: { profile: true }
-  });
-
-  if (!user) {
-    return res.status(404).json({ error: "Usuario nao encontrado." });
-  }
-
-  const profile = await prisma.userProfile.upsert({
-    where: { userId: user.id },
-    create: {
-      userId: user.id,
-      role: user.role || "USER",
-      deviceId: null,
-      deviceBoundAt: null
-    },
-    update: {
-      deviceId: null,
-      deviceBoundAt: null
-    }
-  });
-
-  sendDeviceResetEmail({
-    to: user.email,
-    name: user.name
-  }).catch((error) => {
-    console.error("[admin:device] Falha ao enviar email de reset de aparelho.", {
-      userId: user.id,
-      message: error.message
-    });
-  });
-
-  return res.json({
-    ok: true,
-    message: "Vinculo de aparelho resetado.",
-    user: userResponse({ ...user, profile })
   });
 });
 
