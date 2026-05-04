@@ -48,7 +48,8 @@ app.use(
       }
 
       return callback(null, false);
-    }
+    },
+    credentials: true
   })
 );
 app.use(express.json({ limit: "1mb" }));
