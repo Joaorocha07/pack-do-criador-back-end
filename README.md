@@ -31,13 +31,30 @@ Copy-Item .env.example .env
 
 - `DATABASE_URL`: connection string do Neon com `sslmode=require`.
 - `JWT_SECRET`: segredo grande para assinar JWT.
+- `PASSWORD_RESET_CODE_TTL_MINUTES`: tempo de validade do codigo de recuperacao de senha, padrao `15`.
+- `PASSWORD_RESET_RESEND_SECONDS`: intervalo minimo para reenviar codigo, padrao `60`.
+- `PASSWORD_RESET_MAX_ATTEMPTS`: tentativas maximas por codigo, padrao `5`.
 - `CAKTO_WEBHOOK_SECRET`: segredo para proteger o webhook.
 - `CAKTO_PRODUCT_NAME`: nome do produto que deve liberar acesso.
-- `SMTP_*`: dados do provedor de email.
+- `CHECKOUT_AFFILIATE_URL`: link de checkout com afiliada.
+- `CHECKOUT_OWN_URL`: link de checkout sem afiliada.
+- `CHECKOUT_ROTATION_SOURCE`: use `checkout` para girar a cada chamada do endpoint, `purchases` para vendas registradas ou `database-users` para usuarios com acesso.
+- `EMAIL_PROVIDER`: use `brevo-api` na Railway ou `smtp` quando o host permitir SMTP.
+- `BREVO_API_KEY`: chave da API da Brevo para envio HTTPS.
+- `SMTP_*`: dados do provedor de email quando `EMAIL_PROVIDER=smtp`.
 - `APP_URL`: URL do seu frontend/login.
 - `BACKEND_PUBLIC_URL`: URL publica deste backend, usada para montar links autenticados de download.
 - `DOWNLOAD_LINK_SECRET`: segredo para assinar links temporarios de download. Se nao definido, usa `JWT_SECRET`.
 - `DOWNLOAD_LINK_TTL_SECONDS`: validade do link temporario de download em segundos. Padrao: `900`.
+- `CORS_ORIGINS`: origens permitidas pelo CORS, separadas por virgula. Em producao, inclua `https://packdocriador.com`.
+- `STICKER_STORAGE_DIR`: pasta privada onde as imagens das figurinhas ficam salvas.
+- `STICKER_UPLOAD_MAX_IMAGE_MB`: limite por imagem, padrao `20`.
+- `STICKER_UPLOAD_MAX_FILES`: limite de arquivos por upload, padrao `1000`.
+- `STICKER_UPLOAD_MAX_REQUEST_MB`: limite total do multipart, padrao `512`.
+- `STICKER_DELIVERY_MODE`: use `proxy` para a API fazer stream das imagens ou `redirect` para redirecionar para uma URL publica/Worker do R2 depois de validar o usuario.
+
+> Na Vercel, Functions tem limite de payload de 4.5MB por request. Se este backend estiver rodando na Vercel, configure `STICKER_UPLOAD_MAX_IMAGE_MB=4` e `STICKER_UPLOAD_MAX_REQUEST_MB=4`, ou envie as figurinhas em lotes menores pelo frontend. Requests maiores sao barrados pela propria Vercel antes de chegar no Express.
+> Para figurinhas protegidas em producao, prefira uma hospedagem com disco persistente ou um storage externo. O `STICKER_STORAGE_DIR` local nao e uma boa base duravel para arquivos enviados em Functions serverless.
 
 ## Deploy no Render
 
@@ -66,37 +83,77 @@ ADMIN_IMPORT_SECRET=seu-segredo-de-importacao
 CAKTO_PRODUCT_NAME=Pack do Criador
 CAKTO_CLIENT_ID=client-id-da-cakto
 CAKTO_CLIENT_SECRET=client-secret-da-cakto
+CHECKOUT_AFFILIATE_URL=https://pay.cakto.com.br/wjzbfzc_596335?affiliate=6daZPhsr
+CHECKOUT_OWN_URL=https://pay.cakto.com.br/wjzbfzc_596335
+CHECKOUT_AFFILIATE_USERS_BEFORE_OWN=3
+CHECKOUT_ROTATION_SOURCE=checkout
+EMAIL_PROVIDER=brevo-api
+BREVO_API_KEY=sua-api-key-da-brevo
+MAIL_FROM=Pack do Criador <email-validado-na-brevo@seudominio.com>
+SUPPORT_EMAIL=packdocriador1@gmail.com
+STICKER_STORAGE_DIR=./.private/stickers
+STICKER_UPLOAD_MAX_IMAGE_MB=20
+STICKER_UPLOAD_MAX_FILES=1000
+STICKER_UPLOAD_MAX_REQUEST_MB=512
+```
+
+Nao precisa adicionar `PORT` no Render; ele fornece essa variavel automaticamente.
+
+### Storage com Cloudflare R2
+
+Para nao perder imagens em deploy, restart ou troca de instancia no Render, use R2 em producao.
+
+No painel da Cloudflare:
+
+1. Acesse **R2 Object Storage** em **Armazenamento e banco**.
+2. Crie um bucket, por exemplo `pack-do-criador-stickers`.
+3. Abra **Manage R2 API Tokens**.
+4. Crie um token com permissao de leitura e escrita no bucket.
+5. Copie `Access Key ID`, `Secret Access Key` e o `Account ID`.
+
+No Render, configure:
+
+```text
+STICKER_STORAGE_DRIVER=r2
+R2_ACCOUNT_ID=seu-account-id
+R2_BUCKET=pack-do-criador-stickers
+R2_ACCESS_KEY_ID=sua-access-key-id
+R2_SECRET_ACCESS_KEY=sua-secret-access-key
+STICKER_STORAGE_MAX_MB=9500
+```
+
+O `R2_ENDPOINT` e opcional. Se precisar informar manualmente:
+
+```text
+R2_ENDPOINT=https://SEU_ACCOUNT_ID.r2.cloudflarestorage.com
+```
+
+Depois faca deploy novamente. As imagens enviadas depois dessa configuracao ficam salvas no R2. Registros antigos que apontavam para arquivos locais perdidos precisam ser reenviados.
+
+`STICKER_STORAGE_MAX_MB` trava novos uploads quando a soma das imagens no banco mais o lote enviado passar do limite. Use `9500` para ficar perto de 9.5GB, abaixo do free tier de 10GB do R2. Use `9.5` apenas se quiser testar a trava em 9.5MB.
+
+### Envio de email com Brevo
+
+No painel da Brevo:
+
+1. Ative emails transacionais.
+2. Crie uma API key em **SMTP & API > API Keys**.
+3. Configure `EMAIL_PROVIDER=brevo-api`.
+4. Configure `BREVO_API_KEY` com a API key criada.
+5. Valide o remetente ou autentique o dominio. O email de `MAIL_FROM` precisa ser um remetente aceito pela Brevo.
+
+Na Railway, prefira API HTTPS porque portas SMTP podem dar timeout. Para SMTP em outro host, use:
+
+```text
+EMAIL_PROVIDER=smtp
 SMTP_HOST=smtp-relay.brevo.com
 SMTP_PORT=2525
 SMTP_SECURE=false
 SMTP_USER=seu-login-smtp-da-brevo
 SMTP_PASS=sua-smtp-key-da-brevo
-MAIL_FROM=Pack do Criador <email-validado-na-brevo@seudominio.com>
 ```
 
-Nao precisa adicionar `PORT` no Render; ele fornece essa variavel automaticamente.
-
-### Envio de email com Brevo
-
-O backend usa Nodemailer com SMTP, entao nao precisa instalar SDK da Brevo.
-
-No painel da Brevo:
-
-1. Ative emails transacionais/SMTP.
-2. Crie ou copie suas credenciais em **SMTP & API > SMTP**.
-3. Use o **SMTP login** em `SMTP_USER`.
-4. Use uma **SMTP key** em `SMTP_PASS`. Nao use API key nem a senha da conta Brevo.
-5. Valide o remetente ou autentique o dominio. O email de `MAIL_FROM` precisa ser um remetente aceito pela Brevo.
-
-Para Render Free, use a porta `2525`, porque portas SMTP comuns como `587` e `465` podem ser bloqueadas pela hospedagem:
-
-```text
-SMTP_HOST=smtp-relay.brevo.com
-SMTP_PORT=2525
-SMTP_SECURE=false
-```
-
-Se voce estiver em uma instancia paga e quiser usar a porta padrao da Brevo, tambem pode usar `SMTP_PORT=587` com `SMTP_SECURE=false`.
+Se voce estiver em uma instancia que permita SMTP, tambem pode usar `SMTP_PORT=587` com `SMTP_SECURE=false`.
 
 Depois que o Render gerar a URL, teste:
 
@@ -109,6 +166,105 @@ Se responder `{ "ok": true }`, configure na Cakto:
 ```text
 https://URL-GERADA-PELO-RENDER/webhooks/cakto?secret=SEU_CAKTO_WEBHOOK_SECRET
 ```
+
+## Deploy na Railway
+
+Crie um projeto na Railway apontando para este repositorio.
+
+Use estas configuracoes:
+
+```text
+Build Command: npm run railway-build
+Start Command: npm start
+```
+
+Configure as variaveis do ambiente de producao na Railway. Para este projeto, o conjunto minimo esperado e:
+
+```text
+APP_URL=https://packdocriador.com
+CORS_ORIGINS=https://packdocriador.com,https://www.packdocriador.com
+DATABASE_URL=sua-url-do-neon
+JWT_SECRET=gere-um-novo-segredo-grande
+JWT_EXPIRES_IN=7d
+PASSWORD_RESET_CODE_TTL_MINUTES=15
+PASSWORD_RESET_RESEND_SECONDS=60
+PASSWORD_RESET_MAX_ATTEMPTS=5
+CAKTO_WEBHOOK_SECRET=gere-um-novo-segredo-do-webhook
+ADMIN_IMPORT_SECRET=gere-um-novo-segredo-de-importacao
+CAKTO_PRODUCT_NAME=Pack do Criador
+CAKTO_CLIENT_ID=client-id-da-cakto
+CAKTO_CLIENT_SECRET=client-secret-da-cakto
+CHECKOUT_AFFILIATE_URL=https://pay.cakto.com.br/wjzbfzc_596335?affiliate=6daZPhsr
+CHECKOUT_OWN_URL=https://pay.cakto.com.br/wjzbfzc_596335
+CHECKOUT_AFFILIATE_USERS_BEFORE_OWN=3
+CHECKOUT_ROTATION_SOURCE=checkout
+EMAIL_PROVIDER=brevo-api
+BREVO_API_KEY=sua-api-key-da-brevo
+MAIL_FROM=Pack do Criador <email-validado-na-brevo@seudominio.com>
+SUPPORT_EMAIL=packdocriador1@gmail.com
+STICKER_STORAGE_DRIVER=r2
+STICKER_UPLOAD_MAX_IMAGE_MB=20
+STICKER_UPLOAD_MAX_FILES=1000
+STICKER_UPLOAD_MAX_REQUEST_MB=512
+STICKER_STORAGE_MAX_MB=9500
+R2_ACCOUNT_ID=seu-account-id
+R2_BUCKET=pack-do-criador-stickers
+R2_ACCESS_KEY_ID=access-key-id-rotacionado
+R2_SECRET_ACCESS_KEY=secret-access-key-rotacionado
+```
+
+Nao configure `PORT`; a Railway injeta essa variavel automaticamente.
+
+Depois do deploy, teste:
+
+```text
+https://URL-DA-API.up.railway.app/health
+https://URL-DA-API.up.railway.app/health/db
+```
+
+Quando os health checks responderem, configure no frontend:
+
+```text
+BACKEND_API_URL=https://URL-DA-API.up.railway.app
+```
+
+Atualize tambem o webhook da Cakto para a nova API:
+
+```text
+https://URL-DA-API.up.railway.app/webhooks/cakto?secret=SEU_CAKTO_WEBHOOK_SECRET
+```
+
+### Entrega das imagens via R2 ou Worker
+
+Por padrao, as URLs de figurinhas continuam protegidas e a API faz stream do arquivo:
+
+```text
+STICKER_DELIVERY_MODE=proxy
+```
+
+Se voce criar um dominio publico controlado no R2 ou um Cloudflare Worker para entregar objetos, pode reduzir trafego da Railway:
+
+```text
+STICKER_DELIVERY_MODE=redirect
+R2_PUBLIC_BASE_URL=https://imagens.seudominio.com
+```
+
+Nesse modo, a API ainda valida JWT e acesso ativo antes de responder. Depois disso, ela redireciona para `R2_PUBLIC_BASE_URL` com o caminho do objeto. Se o bucket ficar publico, qualquer pessoa com a URL final pode abrir o arquivo; para manter protecao forte, use um Worker com URLs temporarias ou validacao propria.
+
+### Checklist pos-migracao
+
+Teste estes fluxos antes de desligar o Render:
+
+- `GET /health` e `GET /health/db`.
+- Login e `GET /auth/me`.
+- Area de membros no frontend em `https://packdocriador.com`.
+- `GET /stickers/categories`.
+- Listagem, visualizacao e download de figurinhas.
+- Upload admin em `/admin/stickers/categories/:id/images`.
+- `GET /checkout/link`.
+- Webhook real ou teste da Cakto em `/webhooks/cakto`.
+
+Como segredos foram expostos fora do ambiente, rotacione antes de colocar a Railway em producao: JWT, R2, Cakto, Brevo/SMTP e, se possivel, a credencial do Neon.
 
 ## Importar compradores antigos da Cakto
 
@@ -152,12 +308,165 @@ Body:
 
 O importador busca pedidos pagos do produto definido em `CAKTO_PRODUCT_NAME`, cria usuarios no Neon e envia email de acesso quando `sendEmail` for `true`.
 
-### Listar usuarios importados
+### Importar afiliados manualmente
+
+A API publica da Cakto retorna afiliados comissionados em pedidos, mas nao expõe a lista completa de **Meus Afiliados** do painel. Para fazer esses afiliados aparecerem em `/admin/users`, importe os emails uma vez:
+
+```http
+POST https://URL-GERADA-PELO-RENDER/admin/import-affiliates
+Content-Type: application/json
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+Body:
+
+```json
+{
+  "affiliates": [
+    {
+      "name": "-",
+      "email": "isalellis01@gmail.com",
+      "productName": "Pack do Criador",
+      "commissionPercentage": 75,
+      "status": "Ativo"
+    },
+    {
+      "name": "Ana",
+      "email": "lauraana.brum@gmail.com",
+      "productName": "Pack do Criador",
+      "commissionPercentage": 30,
+      "status": "Ativo"
+    }
+  ]
+}
+```
+
+Retorna `{ "ok": true, "summary": { ... }, "users": [ ... ] }`.
+
+### Listar usuarios e afiliados
 
 ```http
 GET https://URL-GERADA-PELO-RENDER/admin/users
 Authorization: Bearer SEU_TOKEN_ADMIN
 ```
+
+Por padrao, a resposta junta os usuarios salvos no Neon com afiliados encontrados nos pedidos pagos da Cakto para o produto configurado em `CAKTO_PRODUCT_NAME`. Afiliados que ja existem no Neon nao sao duplicados.
+
+Retorna:
+
+```json
+{
+  "ok": true,
+  "users": [
+    {
+      "id": "USER_ID",
+      "name": "Cliente",
+      "email": "cliente@email.com",
+      "role": "USER",
+      "roleLabel": "user",
+      "hasAccess": true,
+      "temporaryPassword": false,
+      "profile": {
+        "id": "PROFILE_ID",
+        "role": "USER",
+        "roleLabel": "user",
+        "temporarilyDisabled": false,
+        "disabledUntil": null,
+        "disabledReason": null
+      }
+    },
+    {
+      "id": "cakto-affiliate-123",
+      "name": "-",
+      "email": "afiliado@email.com",
+      "role": "AFILIADO",
+      "roleLabel": "afiliado",
+      "hasAccess": false,
+      "source": "cakto",
+      "affiliate": {
+        "id": 123,
+        "productName": "Pack do Criador",
+        "commissionPercentage": 30,
+        "commissionValue": 29.9,
+        "lastOrderId": "ORDER_ID",
+        "lastOrderDate": "2026-05-01T00:00:00.000Z"
+      }
+    }
+  ],
+  "sources": {
+    "database": 1,
+    "caktoAffiliates": 1
+  },
+  "warnings": []
+}
+```
+
+Roles aceitos pelo front: `admin`, `user`, `teste`, `afiliado`.
+
+### Admin: alterar tipo de perfil
+
+```http
+PATCH https://URL-GERADA-PELO-RENDER/admin/users/USER_ID/role
+Content-Type: application/json
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+Body:
+
+```json
+{
+  "role": "afiliado"
+}
+```
+
+Retorna `{ "ok": true, "message": "Tipo de perfil atualizado.", "user": { ... } }`.
+
+### Admin: desativar conta temporariamente
+
+```http
+PATCH https://URL-GERADA-PELO-RENDER/admin/users/USER_ID/temporary-disable
+Content-Type: application/json
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+Body:
+
+```json
+{
+  "disabledUntil": "2026-05-08T23:59:59.000Z",
+  "reason": "Pausa temporaria solicitada pelo suporte."
+}
+```
+
+Enquanto estiver desativado, login e endpoints protegidos retornam `403` com `disabledUntil` e `disabledReason`.
+
+### Admin: reativar conta
+
+```http
+DELETE https://URL-GERADA-PELO-RENDER/admin/users/USER_ID/temporary-disable
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+Retorna `{ "ok": true, "message": "Conta reativada.", "user": { ... } }`.
+
+### Admin: alterar senha de um perfil
+
+```http
+PATCH https://URL-GERADA-PELO-RENDER/admin/users/USER_ID/password
+Content-Type: application/json
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+Body:
+
+```json
+{
+  "password": "nova-senha-segura",
+  "temporaryPassword": false
+}
+```
+
+Retorna `{ "ok": true, "message": "Senha do perfil atualizada.", "user": { ... } }`.
 
 ### Enviar email de acesso manualmente
 
@@ -237,6 +546,316 @@ Resposta:
 
 No front, use esse `downloadUrl` como navegacao/anchor direto, nao faca proxy por uma rota `/api` da Vercel. Exemplo: `<a href={pack.downloadUrl}>Baixar</a>`. Se o link expirar, basta buscar `/sticker-packs` novamente para receber outro.
 
+## Figurinhas protegidas
+
+As URLs retornadas apontam para endpoints protegidos. O frontend deve enviar o JWT em todas as chamadas, inclusive ao carregar a imagem:
+
+```http
+Authorization: Bearer SEU_TOKEN
+```
+
+### Cards para o usuario
+
+```http
+GET /stickers/categories
+```
+
+Retorna:
+
+```json
+{
+  "categories": [
+    {
+      "id": "cat_123",
+      "slug": "acessorios",
+      "title": "Acessórios",
+      "description": "Figurinhas para stories de moda e beleza.",
+      "totalStickers": 304,
+      "coverImageId": "img_abc",
+      "coverUrl": "/stickers/images/img_abc"
+    }
+  ]
+}
+```
+
+### Imagens de uma categoria
+
+```http
+GET /stickers/categories/:id/images?limit=60
+GET /stickers/categories/:id/images?page=2&limit=60
+GET /stickers/categories/:id/images?offset=60&limit=60
+GET /stickers/categories/:id/images?limit=60&cursor=img_abc
+```
+
+Retorna:
+
+```json
+{
+  "category": {
+    "id": "cat_123",
+    "title": "Acessórios",
+    "description": "Figurinhas para stories de moda e beleza."
+  },
+  "images": [
+    {
+      "id": "img_abc",
+      "name": "brincos.png",
+      "url": "/stickers/images/img_abc",
+      "downloadUrl": "/stickers/images/img_abc/download"
+    }
+  ],
+  "pagination": {
+    "limit": 60,
+    "page": 1,
+    "offset": 0,
+    "hasNextPage": true,
+    "nextCursor": "img_abc",
+    "nextPage": 2,
+    "nextOffset": 60
+  }
+}
+```
+
+Use `nextPage`, `nextOffset` ou `nextCursor` na proxima chamada para carregar o proximo lote. O limite padrao e 60 imagens por chamada, com maximo de 200.
+
+### Servir imagem ou download
+
+```http
+GET /stickers/images/:id
+GET /stickers/images/:id/download
+```
+
+### Admin: criar categoria
+
+```http
+POST /admin/stickers/categories
+Content-Type: application/json
+```
+
+```json
+{
+  "title": "Acessórios",
+  "description": "Figurinhas para stories de moda e beleza."
+}
+```
+
+### Admin: listar categorias
+
+```http
+GET /admin/stickers/categories
+```
+
+Retorna os mesmos cards de `GET /stickers/categories`, com `coverImageId` e `coverUrl`.
+
+### Admin: uso do storage
+
+```http
+GET /admin/stickers/storage-usage
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+Retorna o total usado no storage ativo e o limite configurado em `STICKER_STORAGE_MAX_MB`. Quando `STICKER_STORAGE_DRIVER=r2`, o uso vem do bucket Cloudflare R2; `databaseBytes` fica apenas como referencia dos metadados salvos no Neon.
+
+### Admin: detalhar categoria
+
+```http
+GET /admin/stickers/categories/:id
+```
+
+Retorna `category` e `images` para a tela de edicao do admin.
+
+### Admin: editar categoria e capa
+
+```http
+PATCH /admin/stickers/categories/:id
+Content-Type: application/json
+```
+
+```json
+{
+  "title": "Acessórios",
+  "description": "Nova descrição",
+  "coverImageId": "uuid-da-imagem"
+}
+```
+
+`coverImageId` e opcional. Envie `null` para remover a capa manual. Se nao houver capa, o card usa a primeira figurinha da categoria como fallback.
+
+### Admin: definir ou remover capa
+
+```http
+PUT /admin/stickers/categories/:id/cover
+Content-Type: application/json
+```
+
+```json
+{
+  "imageId": "img_abc"
+}
+```
+
+```http
+DELETE /admin/stickers/categories/:id/cover
+```
+
+Ambos retornam `{ "category": { ... } }`.
+
+### Admin: upload multiplo
+
+```http
+POST /admin/stickers/categories/:id/images
+Content-Type: multipart/form-data
+```
+
+Campo do form:
+
+```text
+files: File[]
+```
+
+O backend aceita PNG, JPG, JPEG e WEBP, valida o MIME e a assinatura real do arquivo, salva em storage privado local e nunca expoe `storageKey` na resposta.
+
+Se o backend estiver hospedado na Vercel, cada chamada deste endpoint precisa ficar abaixo de 4.5MB no total. Para uploads grandes, envie uma imagem por request ou divida em lotes pequenos; em hospedagens como Render, o limite pode ser controlado por `STICKER_UPLOAD_MAX_REQUEST_MB`.
+
+Exemplo de envio no frontend:
+
+```js
+async function uploadStickerBatch({ apiUrl, categoryId, files, token }) {
+  const formData = new FormData();
+
+  for (const file of files) {
+    formData.append("files", file, file.name);
+  }
+
+  const response = await fetch(`${apiUrl}/admin/stickers/categories/${categoryId}/images`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: formData
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.error || "Nao foi possivel enviar a figurinha.");
+  }
+
+  return data;
+}
+```
+
+Nao defina `Content-Type` manualmente nesse `fetch`; o navegador precisa gerar o `multipart/form-data` com `boundary`. Tambem nao envie arquivo como base64 ou JSON.
+
+Para Vercel, divida os arquivos em lotes pequenos antes de chamar o endpoint:
+
+```js
+const VERCEL_SAFE_UPLOAD_BYTES = Math.floor(3.8 * 1024 * 1024);
+
+function splitFilesForVercel(files, maxBytes = VERCEL_SAFE_UPLOAD_BYTES) {
+  const batches = [];
+  let currentBatch = [];
+  let currentSize = 0;
+
+  for (const file of files) {
+    if (file.size >= maxBytes) {
+      throw new Error(`O arquivo ${file.name} tem mais de 3.8MB. Comprima ou redimensione antes de enviar.`);
+    }
+
+    if (currentBatch.length && currentSize + file.size > maxBytes) {
+      batches.push(currentBatch);
+      currentBatch = [];
+      currentSize = 0;
+    }
+
+    currentBatch.push(file);
+    currentSize += file.size;
+  }
+
+  if (currentBatch.length) {
+    batches.push(currentBatch);
+  }
+
+  return batches;
+}
+
+async function uploadStickers({ apiUrl, categoryId, files, token }) {
+  const batches = splitFilesForVercel(Array.from(files));
+  const results = [];
+
+  for (const batch of batches) {
+    results.push(await uploadStickerBatch({ apiUrl, categoryId, files: batch, token }));
+  }
+
+  return results;
+}
+```
+
+Resposta:
+
+```json
+{
+  "uploaded": 2,
+  "category": {
+    "id": "cat_123",
+    "slug": "acessorios",
+    "title": "Acessorios",
+    "description": "Figurinhas para stories de moda e beleza.",
+    "totalStickers": 304,
+    "coverImageId": "img_abc",
+    "coverUrl": "/stickers/images/img_abc"
+  },
+  "images": [
+    {
+      "id": "img_abc",
+      "categoryId": "cat_123",
+      "name": "brincos.png",
+      "originalName": "brincos.png",
+      "mimeType": "image/png",
+      "size": 123456,
+      "url": "/stickers/images/img_abc",
+      "downloadUrl": "/stickers/images/img_abc/download",
+      "createdAt": "2026-05-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+### Admin: editar nome da figurinha
+
+```http
+PATCH /admin/stickers/images/:id
+Content-Type: application/json
+```
+
+```json
+{
+  "name": "brincos dourados.png"
+}
+```
+
+Retorna `{ "image": { ... } }`.
+
+### Admin: excluir figurinha
+
+```http
+DELETE /admin/stickers/images/:id
+```
+
+Retorna `{ "ok": true, "deletedImageId": "img_abc", "category": { ... } }`.
+
+### Admin: remover categoria
+
+```http
+DELETE /admin/stickers/categories/:id
+```
+
+Remove a categoria e as imagens dela no banco. Os arquivos locais tambem sao apagados em segundo plano.
+
+## SQL das tabelas de figurinhas no Neon
+
+O arquivo `prisma/init-neon.sql` ja foi atualizado. Se for criar manualmente, rode a parte de `StickerPack`, `StickerCategory`, `StickerImage` e `StickerCategoryCover` no editor SQL do Neon.
+
 ## Rotas
 
 ### `POST /auth/login`
@@ -265,6 +884,99 @@ Authorization: Bearer SEU_TOKEN
 }
 ```
 
+### Recuperar senha por email
+
+Fluxo para usuario que esqueceu a senha:
+
+1. Front envia o email para `POST /auth/password-reset/request`.
+2. Se o email existir e tiver acesso ativo, a API envia um codigo de 6 digitos.
+3. Front envia email, codigo e nova senha para `POST /auth/password-reset/confirm`.
+4. Depois disso, o usuario faz login normalmente em `POST /auth/login`.
+
+#### Solicitar codigo
+
+```bash
+curl -X POST "https://URL-DA-API.up.railway.app/auth/password-reset/request" \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"cliente@email.com\"}"
+```
+
+Resposta sempre generica, para nao revelar se o email existe:
+
+```json
+{
+  "ok": true,
+  "message": "Se o email estiver cadastrado, enviaremos um codigo para redefinir a senha."
+}
+```
+
+#### Confirmar codigo e trocar senha
+
+```bash
+curl -X POST "https://URL-DA-API.up.railway.app/auth/password-reset/confirm" \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"cliente@email.com\",\"code\":\"123456\",\"newPassword\":\"novaSenha123\"}"
+```
+
+Resposta de sucesso:
+
+```json
+{
+  "ok": true,
+  "message": "Senha alterada com sucesso. Voce ja pode fazer login."
+}
+```
+
+Erros comuns:
+
+```json
+{
+  "error": "Codigo invalido ou expirado."
+}
+```
+
+O codigo expira em `PASSWORD_RESET_CODE_TTL_MINUTES`, por padrao 15 minutos. Cada codigo aceita ate `PASSWORD_RESET_MAX_ATTEMPTS`, por padrao 5 tentativas.
+
+#### Exemplo para o frontend
+
+```js
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+
+export async function requestPasswordReset(email) {
+  const response = await fetch(`${apiUrl}/auth/password-reset/request`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email })
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.error || "Nao foi possivel enviar o codigo.");
+  }
+
+  return data;
+}
+
+export async function confirmPasswordReset({ email, code, newPassword }) {
+  const response = await fetch(`${apiUrl}/auth/password-reset/confirm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, code, newPassword })
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.error || "Nao foi possivel alterar a senha.");
+  }
+
+  return data;
+}
+```
+
+No front, crie duas etapas: primeiro uma tela com `email`; depois uma tela com `codigo` e `novaSenha`. Depois de `confirmPasswordReset` responder `ok: true`, redirecione para `/login` e peça para o usuario entrar com a nova senha.
+
 ### `POST /auth/logout`
 
 Envie o token no header:
@@ -282,6 +994,36 @@ Resposta:
 ```
 
 Depois do logout, remova o token salvo no front.
+
+### `GET /checkout/link`
+
+Endpoint publico, sem JWT, para buscar o link de venda da vez.
+
+Com `CHECKOUT_ROTATION_SOURCE=checkout` e `CHECKOUT_AFFILIATE_USERS_BEFORE_OWN=3`, o ciclo por chamadas do endpoint fica assim:
+
+- chamadas 1, 2 e 3: `CHECKOUT_AFFILIATE_URL`
+- chamada 4: `CHECKOUT_OWN_URL`
+- chamada 5: reinicia no link afiliado
+
+Resposta:
+
+```json
+{
+  "url": "https://pay.cakto.com.br/wjzbfzc_596335?affiliate=6daZPhsr",
+  "target": "affiliate",
+  "source": "checkout",
+  "currentCount": 0,
+  "nextPosition": 1,
+  "cycleSize": 4,
+  "affiliateSlots": 3
+}
+```
+
+Se quiser redirecionar direto para a Cakto, use:
+
+```text
+GET /checkout/link?redirect=true
+```
 
 ### `POST /webhooks/cakto`
 
@@ -309,3 +1051,4 @@ O arquivo `src/routes/cakto.routes.js` tenta ler campos comuns como:
 
 Quando voce pegar o exemplo oficial do webhook da Cakto, ajuste a funcao `mapCaktoPayload` se os nomes forem diferentes.
 # pack-do-criador-back-end
+

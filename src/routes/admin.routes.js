@@ -7,6 +7,39 @@ const { sendAccessEmail } = require("../lib/mailer");
 const { requireAdmin, requireAuth } = require("../middlewares/auth");
 
 const router = express.Router();
+const PROFILE_ROLES = ["ADMIN", "USER", "TESTE", "AFILIADO"];
+
+const roleSchema = z.object({
+  role: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .refine((value) => PROFILE_ROLES.includes(value), {
+      message: "Tipo de perfil invalido."
+    })
+});
+
+const temporaryDisableSchema = z.object({
+  disabledUntil: z.coerce.date(),
+  reason: z.string().trim().max(500).optional().nullable()
+});
+
+const passwordUpdateSchema = z.object({
+  password: z.string().min(8),
+  temporaryPassword: z.boolean().optional()
+});
+
+const affiliateImportSchema = z.object({
+  affiliates: z.array(
+    z.object({
+      name: z.string().trim().optional().nullable(),
+      email: z.string().trim().email(),
+      productName: z.string().trim().optional().nullable(),
+      commissionPercentage: z.union([z.string(), z.number()]).optional().nullable(),
+      status: z.string().trim().optional().nullable()
+    })
+  )
+});
 
 const stickerPackSchema = z.object({
   name: z.string().trim().min(1),
@@ -22,6 +55,37 @@ function normalize(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function roleForApi(role) {
+  return String(role || "USER").toLowerCase();
+}
+
+function profileStatus(profile) {
+  const disabledUntil = profile?.disabledUntil || null;
+  const temporarilyDisabled = Boolean(
+    profile?.temporarilyDisabled &&
+      (!disabledUntil || new Date(disabledUntil).getTime() > Date.now())
+  );
+
+  return {
+    temporarilyDisabled,
+    disabledUntil,
+    disabledReason: profile?.disabledReason || null
+  };
+}
+
+async function ensureUserProfile(user) {
+  if (user.profile) {
+    return user.profile;
+  }
+
+  return prisma.userProfile.create({
+    data: {
+      userId: user.id,
+      role: user.role || "USER"
+    }
+  });
+}
+
 function requireAdminImportSecret(req, res, next) {
   const expectedSecret = process.env.ADMIN_IMPORT_SECRET || process.env.CAKTO_WEBHOOK_SECRET;
   const receivedSecret = req.headers["x-admin-secret"] || req.query.secret;
@@ -34,15 +98,32 @@ function requireAdminImportSecret(req, res, next) {
 }
 
 function userResponse(user) {
+  const profile = user.profile || {
+    role: user.role,
+    temporarilyDisabled: false,
+    disabledUntil: null,
+    disabledReason: null
+  };
+  const status = profileStatus(profile);
+
   return {
     id: user.id,
     name: user.name,
     email: user.email,
-    role: user.role,
+    role: profile.role,
+    roleLabel: roleForApi(profile.role),
     hasAccess: user.hasAccess,
     temporaryPassword: user.temporaryPassword,
     accessEmailSent: user.accessEmailSent,
-    accessEmailSentAt: user.accessEmailSentAt
+    accessEmailSentAt: user.accessEmailSentAt,
+    profile: {
+      id: profile.id || null,
+      role: profile.role,
+      roleLabel: roleForApi(profile.role),
+      temporarilyDisabled: status.temporarilyDisabled,
+      disabledUntil: status.disabledUntil,
+      disabledReason: status.disabledReason
+    }
   };
 }
 
@@ -52,6 +133,81 @@ function isPaidPackOrder(order) {
   const status = normalize(order.status);
 
   return productName === expectedProduct && status === "paid";
+}
+
+function getCommissionForUser(order, commissionedUser) {
+  const commissionedUserId = String(commissionedUser?.id || "");
+
+  return (order.commissions || []).find((commission) => {
+    const commissionUserId = String(commission.userId || commission.user_id || "");
+    return commissionUserId === commissionedUserId && normalize(commission.type) === "affiliate";
+  });
+}
+
+function affiliateResponse({ commissionedUser, commission, order }) {
+  const email = commissionedUser?.email?.toLowerCase() || null;
+  const fallbackId = email || commissionedUser?.id;
+
+  return {
+    id: `cakto-affiliate-${fallbackId}`,
+    name: commissionedUser?.name || commissionedUser?.fullName || "-",
+    email,
+    role: "AFILIADO",
+    roleLabel: "afiliado",
+    hasAccess: false,
+    temporaryPassword: false,
+    accessEmailSent: false,
+    accessEmailSentAt: null,
+    source: "cakto",
+    affiliate: {
+      id: commissionedUser?.id || null,
+      productName: order.product?.name || null,
+      commissionPercentage: commission?.commissionPercentage ?? null,
+      commissionValue: commission?.commissionValue ?? null,
+      lastOrderId: order.id || null,
+      lastOrderDate: order.paidAt || order.createdAt || null
+    },
+    profile: {
+      id: null,
+      role: "AFILIADO",
+      roleLabel: "afiliado",
+      temporarilyDisabled: false,
+      disabledUntil: null,
+      disabledReason: null
+    }
+  };
+}
+
+async function listCaktoAffiliateUsers({ maxPages = 20 } = {}) {
+  const orders = await listCaktoOrders({ maxPages });
+  const affiliatesByKey = new Map();
+
+  for (const order of orders.filter(isPaidPackOrder)) {
+    for (const commissionedUser of order.commissionedUsers || []) {
+      const commission = getCommissionForUser(order, commissionedUser);
+
+      if (!commission) {
+        continue;
+      }
+
+      const key = normalize(commissionedUser.email) || String(commissionedUser.id || "");
+
+      if (!key || affiliatesByKey.has(key)) {
+        continue;
+      }
+
+      affiliatesByKey.set(
+        key,
+        affiliateResponse({
+          commissionedUser,
+          commission,
+          order
+        })
+      );
+    }
+  }
+
+  return Array.from(affiliatesByKey.values());
 }
 
 async function importOrder(order, { sendEmail }) {
@@ -85,6 +241,7 @@ async function importOrder(order, { sendEmail }) {
         temporaryPassword: true
       }
     });
+    await ensureUserProfile(user);
   } else if (!existingUser.hasAccess) {
     passwordToSend = generateTemporaryPassword();
     user = await prisma.user.update({
@@ -96,6 +253,7 @@ async function importOrder(order, { sendEmail }) {
         temporaryPassword: true
       }
     });
+    await ensureUserProfile(user);
   } else {
     user = await prisma.user.update({
       where: { id: existingUser.id },
@@ -104,6 +262,7 @@ async function importOrder(order, { sendEmail }) {
         hasAccess: true
       }
     });
+    await ensureUserProfile(user);
   }
 
   await prisma.purchase.create({
@@ -143,6 +302,64 @@ async function importOrder(order, { sendEmail }) {
   };
 }
 
+async function importAffiliate(affiliate) {
+  const email = normalize(affiliate.email);
+  const name = affiliate.name && affiliate.name !== "-" ? affiliate.name : null;
+  const existingUser = await prisma.user.findUnique({
+    where: { email },
+    include: { profile: true }
+  });
+
+  if (existingUser) {
+    const role = existingUser.role === "ADMIN" ? existingUser.role : "AFILIADO";
+    const updatedUser = await prisma.user.update({
+      where: { id: existingUser.id },
+      data: {
+        name: name || existingUser.name,
+        role
+      },
+      include: { profile: true }
+    });
+    const profile = await prisma.userProfile.upsert({
+      where: { userId: existingUser.id },
+      create: {
+        userId: existingUser.id,
+        role
+      },
+      update: {
+        role
+      }
+    });
+
+    return {
+      imported: false,
+      updated: true,
+      email,
+      user: userResponse({ ...updatedUser, profile })
+    };
+  }
+
+  const password = generateTemporaryPassword();
+  const user = await prisma.user.create({
+    data: {
+      email,
+      name,
+      role: "AFILIADO",
+      passwordHash: await hashPassword(password),
+      hasAccess: false,
+      temporaryPassword: false
+    }
+  });
+  const profile = await ensureUserProfile(user);
+
+  return {
+    imported: true,
+    updated: false,
+    email,
+    user: userResponse({ ...user, profile })
+  };
+}
+
 router.post("/bootstrap-admin", requireAdminImportSecret, async (req, res) => {
   const email = req.body?.email?.toLowerCase();
   const password = req.body?.password;
@@ -172,10 +389,24 @@ router.post("/bootstrap-admin", requireAdminImportSecret, async (req, res) => {
       temporaryPassword: false
     }
   });
+  const profile = await prisma.userProfile.upsert({
+    where: { userId: user.id },
+    create: {
+      userId: user.id,
+      role: "ADMIN"
+    },
+    update: {
+      role: "ADMIN",
+      temporarilyDisabled: false,
+      disabledUntil: null,
+      disabledReason: null
+    }
+  });
+  const userWithProfile = { ...user, profile };
 
   return res.json({
     ok: true,
-    user: userResponse(user)
+    user: userResponse(userWithProfile)
   });
 });
 
@@ -224,7 +455,37 @@ router.post("/import-cakto-purchases", async (req, res) => {
   }
 });
 
+router.post("/import-affiliates", async (req, res) => {
+  const parsed = affiliateImportSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: "Informe affiliates com nome e email dos afiliados."
+    });
+  }
+
+  const results = [];
+
+  for (const affiliate of parsed.data.affiliates) {
+    results.push(await importAffiliate(affiliate));
+  }
+
+  return res.json({
+    ok: true,
+    summary: {
+      received: parsed.data.affiliates.length,
+      imported: results.filter((result) => result.imported).length,
+      updated: results.filter((result) => result.updated).length
+    },
+    users: results.map((result) => result.user)
+  });
+});
+
 router.get("/users", async (req, res) => {
+  const requestedAffiliatePages = Number(req.query.affiliatePages || 20);
+  const maxAffiliatePages = Number.isFinite(requestedAffiliatePages)
+    ? Math.max(1, requestedAffiliatePages)
+    : 20;
   const users = await prisma.user.findMany({
     orderBy: { createdAt: "desc" },
     select: {
@@ -235,11 +496,194 @@ router.get("/users", async (req, res) => {
       hasAccess: true,
       temporaryPassword: true,
       accessEmailSent: true,
-      accessEmailSentAt: true
+      accessEmailSentAt: true,
+      profile: true
+    }
+  });
+  const localUsers = users.map(userResponse);
+  let caktoAffiliates = [];
+  let caktoAffiliateError = null;
+
+  try {
+    caktoAffiliates = await listCaktoAffiliateUsers({ maxPages: maxAffiliatePages });
+  } catch (error) {
+    caktoAffiliateError = error.message;
+    console.error("[admin:users] Falha ao listar afiliados da Cakto.", {
+      message: error.message
+    });
+  }
+
+  const localEmails = new Set(localUsers.map((user) => normalize(user.email)).filter(Boolean));
+  const externalAffiliates = caktoAffiliates.filter((affiliate) => {
+    const email = normalize(affiliate.email);
+    return !email || !localEmails.has(email);
+  });
+
+  return res.json({
+    ok: true,
+    users: [...localUsers, ...externalAffiliates],
+    sources: {
+      database: localUsers.length,
+      caktoAffiliates: externalAffiliates.length
+    },
+    warnings: caktoAffiliateError
+      ? [{ source: "cakto", message: "Afiliados da Cakto nao foram carregados.", detail: caktoAffiliateError }]
+      : []
+  });
+});
+
+router.patch("/users/:id/role", async (req, res) => {
+  const parsed = roleSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: "Tipo de perfil invalido.",
+      allowedRoles: PROFILE_ROLES.map(roleForApi)
+    });
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    include: { profile: true }
+  });
+
+  if (!user) {
+    return res.status(404).json({ error: "Usuario nao encontrado." });
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { role: parsed.data.role }
+  });
+
+  const profile = await prisma.userProfile.upsert({
+    where: { userId: user.id },
+    create: {
+      userId: user.id,
+      role: parsed.data.role
+    },
+    update: {
+      role: parsed.data.role
     }
   });
 
-  return res.json({ ok: true, users });
+  return res.json({
+    ok: true,
+    message: "Tipo de perfil atualizado.",
+    user: userResponse({ ...user, role: parsed.data.role, profile })
+  });
+});
+
+router.patch("/users/:id/temporary-disable", async (req, res) => {
+  const parsed = temporaryDisableSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: "Informe disabledUntil com uma data valida."
+    });
+  }
+
+  if (parsed.data.disabledUntil.getTime() <= Date.now()) {
+    return res.status(400).json({
+      error: "disabledUntil precisa ser uma data futura."
+    });
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    include: { profile: true }
+  });
+
+  if (!user) {
+    return res.status(404).json({ error: "Usuario nao encontrado." });
+  }
+
+  const profile = await prisma.userProfile.upsert({
+    where: { userId: user.id },
+    create: {
+      userId: user.id,
+      role: user.role || "USER",
+      temporarilyDisabled: true,
+      disabledUntil: parsed.data.disabledUntil,
+      disabledReason: parsed.data.reason || null
+    },
+    update: {
+      temporarilyDisabled: true,
+      disabledUntil: parsed.data.disabledUntil,
+      disabledReason: parsed.data.reason || null
+    }
+  });
+
+  return res.json({
+    ok: true,
+    message: "Conta desativada temporariamente.",
+    user: userResponse({ ...user, profile })
+  });
+});
+
+router.delete("/users/:id/temporary-disable", async (req, res) => {
+  const user = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    include: { profile: true }
+  });
+
+  if (!user) {
+    return res.status(404).json({ error: "Usuario nao encontrado." });
+  }
+
+  const profile = await prisma.userProfile.upsert({
+    where: { userId: user.id },
+    create: {
+      userId: user.id,
+      role: user.role || "USER",
+      temporarilyDisabled: false
+    },
+    update: {
+      temporarilyDisabled: false,
+      disabledUntil: null,
+      disabledReason: null
+    }
+  });
+
+  return res.json({
+    ok: true,
+    message: "Conta reativada.",
+    user: userResponse({ ...user, profile })
+  });
+});
+
+router.patch("/users/:id/password", async (req, res) => {
+  const parsed = passwordUpdateSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: "Informe password com no minimo 8 caracteres."
+    });
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    include: { profile: true }
+  });
+
+  if (!user) {
+    return res.status(404).json({ error: "Usuario nao encontrado." });
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordHash: await hashPassword(parsed.data.password),
+      temporaryPassword: parsed.data.temporaryPassword ?? false
+    },
+    include: { profile: true }
+  });
+
+  return res.json({
+    ok: true,
+    message: "Senha do perfil atualizada.",
+    user: userResponse(updatedUser)
+  });
 });
 
 router.get("/sticker-packs", async (_req, res) => {
@@ -274,7 +718,10 @@ router.post("/send-access-email", async (req, res) => {
     return res.status(400).json({ error: "Informe o email do usuario." });
   }
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { profile: true }
+  });
 
   if (!user) {
     return res.status(404).json({ error: "Usuario nao encontrado." });
@@ -290,7 +737,8 @@ router.post("/send-access-email", async (req, res) => {
     data: {
       passwordHash: await hashPassword(temporaryPassword),
       temporaryPassword: true
-    }
+    },
+    include: { profile: true }
   });
 
   try {
@@ -305,7 +753,8 @@ router.post("/send-access-email", async (req, res) => {
       data: {
         accessEmailSent: true,
         accessEmailSentAt: new Date()
-      }
+      },
+      include: { profile: true }
     });
 
     console.log("[admin:send-access-email] Email de acesso enviado.", {

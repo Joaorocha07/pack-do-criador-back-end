@@ -19,7 +19,38 @@ model User {
   accessEmailSentAt DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+  profile           UserProfile?
   purchases         Purchase[]
+  passwordResetCodes PasswordResetCode[]
+}
+
+model UserProfile {
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+  role                  String    @default("USER")
+  temporarilyDisabled   Boolean   @default(false)
+  disabledUntil         DateTime?
+  disabledReason        String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([role])
+  @@index([temporarilyDisabled])
+}
+
+model PasswordResetCode {
+  id        String    @id @default(cuid())
+  userId    String
+  codeHash  String
+  attempts  Int       @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
 }
 
 model Purchase {
@@ -49,4 +80,48 @@ model StickerPack {
   updatedAt   DateTime @updatedAt
 
   @@index([isActive, sortOrder])
+}
+
+model CheckoutRotationState {
+  key       String   @id
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+model StickerCategory {
+  id          String                @id @default(uuid())
+  slug        String                @unique
+  title       String
+  description String?
+  cover       StickerCategoryCover?
+  images      StickerImage[]        @relation("StickerCategoryImages")
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+}
+
+model StickerImage {
+  id           String                 @id @default(uuid())
+  categoryId   String
+  category     StickerCategory        @relation("StickerCategoryImages", fields: [categoryId], references: [id], onDelete: Cascade)
+  coverFor     StickerCategoryCover[]
+  originalName String
+  filename     String
+  mimeType     String
+  size         Int
+  storageKey   String                 @unique
+  createdAt    DateTime               @default(now())
+
+  @@index([categoryId])
+}
+
+model StickerCategoryCover {
+  id         String          @id @default(uuid())
+  categoryId String          @unique
+  imageId    String
+  category   StickerCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  image      StickerImage    @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@index([imageId])
 }
