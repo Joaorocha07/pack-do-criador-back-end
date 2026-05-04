@@ -178,7 +178,7 @@ async function sendImage(req, res, disposition) {
   }
 
   res.setHeader("Content-Type", image.mimeType);
-  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("Cache-Control", disposition === "inline" ? "private, max-age=3600" : "private, no-store");
   res.setHeader("Content-Disposition", safeContentDisposition(disposition, image.originalName));
 
   if (storedFile.contentLength) {
