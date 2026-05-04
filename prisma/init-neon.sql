@@ -56,3 +56,20 @@ BEGIN
     ON UPDATE CASCADE;
   END IF;
 END $$;
+
+CREATE TABLE IF NOT EXISTS "StickerPack" (
+  "id" TEXT NOT NULL,
+  "name" TEXT NOT NULL,
+  "description" TEXT,
+  "coverUrl" TEXT,
+  "downloadUrl" TEXT NOT NULL,
+  "category" TEXT,
+  "isActive" BOOLEAN NOT NULL DEFAULT true,
+  "sortOrder" INTEGER NOT NULL DEFAULT 0,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT "StickerPack_pkey" PRIMARY KEY ("id")
+);
+
+CREATE INDEX IF NOT EXISTS "StickerPack_isActive_sortOrder_idx" ON "StickerPack"("isActive", "sortOrder");

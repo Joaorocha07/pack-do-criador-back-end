@@ -1,4 +1,5 @@
 const express = require("express");
+const { z } = require("zod");
 const prisma = require("../lib/prisma");
 const { listCaktoOrders } = require("../lib/cakto-api");
 const { generateTemporaryPassword, hashPassword } = require("../lib/password");
@@ -6,6 +7,16 @@ const { sendAccessEmail } = require("../lib/mailer");
 const { requireAdmin, requireAuth } = require("../middlewares/auth");
 
 const router = express.Router();
+
+const stickerPackSchema = z.object({
+  name: z.string().trim().min(1),
+  description: z.string().trim().min(1).optional(),
+  coverUrl: z.string().trim().url().optional(),
+  downloadUrl: z.string().trim().url(),
+  category: z.string().trim().min(1).optional(),
+  isActive: z.boolean().optional(),
+  sortOrder: z.number().int().optional()
+});
 
 function normalize(value) {
   return String(value || "").trim().toLowerCase();
@@ -229,6 +240,31 @@ router.get("/users", async (req, res) => {
   });
 
   return res.json({ ok: true, users });
+});
+
+router.get("/sticker-packs", async (_req, res) => {
+  const packs = await prisma.stickerPack.findMany({
+    orderBy: [
+      { sortOrder: "asc" },
+      { name: "asc" }
+    ]
+  });
+
+  return res.json({ ok: true, packs });
+});
+
+router.post("/sticker-packs", async (req, res) => {
+  const parsed = stickerPackSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Dados invalidos." });
+  }
+
+  const pack = await prisma.stickerPack.create({
+    data: parsed.data
+  });
+
+  return res.status(201).json({ ok: true, pack });
 });
 
 router.post("/send-access-email", async (req, res) => {

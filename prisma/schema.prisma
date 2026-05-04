@@ -35,3 +35,18 @@ model Purchase {
   userId         String?
   user           User?    @relation(fields: [userId], references: [id])
 }
+
+model StickerPack {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  coverUrl    String?
+  downloadUrl String
+  category    String?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
