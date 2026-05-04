@@ -35,6 +35,9 @@ Copy-Item .env.example .env
 - `CAKTO_PRODUCT_NAME`: nome do produto que deve liberar acesso.
 - `SMTP_*`: dados do provedor de email.
 - `APP_URL`: URL do seu frontend/login.
+- `BACKEND_PUBLIC_URL`: URL publica deste backend, usada para montar links autenticados de download.
+- `DOWNLOAD_LINK_SECRET`: segredo para assinar links temporarios de download. Se nao definido, usa `JWT_SECRET`.
+- `DOWNLOAD_LINK_TTL_SECONDS`: validade do link temporario de download em segundos. Padrao: `900`.
 
 ## Deploy no Render
 
@@ -52,9 +55,12 @@ Em **Environment Variables**, adicione:
 
 ```text
 APP_URL=https://URL-GERADA-PELO-RENDER
+BACKEND_PUBLIC_URL=https://URL-GERADA-PELO-RENDER
+DOWNLOAD_LINK_TTL_SECONDS=900
 DATABASE_URL=sua-url-do-neon
 JWT_SECRET=seu-jwt-secret
 JWT_EXPIRES_IN=3h
+DOWNLOAD_LINK_SECRET=outro-segredo-grande-para-download
 CAKTO_WEBHOOK_SECRET=seu-segredo-do-webhook
 ADMIN_IMPORT_SECRET=seu-segredo-de-importacao
 CAKTO_PRODUCT_NAME=Pack do Criador
@@ -170,6 +176,66 @@ Body:
 ```
 
 Esse endpoint gera uma nova senha temporaria, envia o email e marca `accessEmailSent=true`.
+
+### Cadastrar pack de figurinhas
+
+Use essa rota com token de administrador para salvar no banco o link final do storage/CDN.
+Esse link deve apontar para fora da Vercel, por exemplo Cloudflare R2, S3, Supabase Storage, Google Drive ou outro CDN.
+
+```http
+POST https://URL-GERADA-PELO-RENDER/admin/sticker-packs
+Content-Type: application/json
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+Body:
+
+```json
+{
+  "name": "Icone 3D",
+  "description": "Pack de figurinhas de icones 3D",
+  "downloadUrl": "https://cdn.seudominio.com/packs/icone-3d.zip",
+  "category": "Figurinhas",
+  "sortOrder": 1,
+  "isActive": true
+}
+```
+
+Para listar todos os packs como admin:
+
+```http
+GET https://URL-GERADA-PELO-RENDER/admin/sticker-packs
+Authorization: Bearer SEU_TOKEN_ADMIN
+```
+
+### Listar packs no front
+
+Use essa rota com token de usuario logado. Ela retorna apenas packs ativos.
+O campo `downloadUrl` retornado para o front e uma URL temporaria assinada pelo backend. Ao acessar essa URL, o backend valida a assinatura e responde apenas com redirect `302` para o arquivo real no storage/CDN, sem trafegar o arquivo pesado pela Vercel.
+
+```http
+GET https://URL-GERADA-PELO-RENDER/sticker-packs
+Authorization: Bearer SEU_TOKEN
+```
+
+Resposta:
+
+```json
+{
+  "packs": [
+    {
+      "id": "id-do-pack",
+      "name": "Icone 3D",
+      "description": "Pack de figurinhas de icones 3D",
+      "coverUrl": null,
+      "downloadUrl": "https://URL-GERADA-PELO-RENDER/sticker-packs/id-do-pack/download?expires=1234567890&signature=...",
+      "category": "Figurinhas"
+    }
+  ]
+}
+```
+
+No front, use esse `downloadUrl` como navegacao/anchor direto, nao faca proxy por uma rota `/api` da Vercel. Exemplo: `<a href={pack.downloadUrl}>Baixar</a>`. Se o link expirar, basta buscar `/sticker-packs` novamente para receber outro.
 
 ## Rotas
 
