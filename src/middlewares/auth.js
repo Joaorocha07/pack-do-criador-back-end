@@ -17,12 +17,13 @@ function activeProfileStatus(profile) {
 
 function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith("Bearer ")
-    ? authHeader.slice("Bearer ".length)
+  const tokenFromHeader = authHeader?.startsWith('Bearer ')
+    ? authHeader.slice('Bearer '.length)
     : null;
+  const token = tokenFromHeader || (typeof req.query.token === 'string' ? req.query.token : null);
 
   if (!token) {
-    return res.status(401).json({ error: "Token nao informado." });
+    return res.status(401).json({ error: 'Token nao informado.' });
   }
 
   try {

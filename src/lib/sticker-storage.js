@@ -71,12 +71,18 @@ function r2Bucket() {
   return process.env.R2_BUCKET;
 }
 
+function backendBaseUrl() {
+  return String(process.env.BACKEND_PUBLIC_URL || process.env.APP_URL || '').replace(/\/$/, '');
+}
+
 function stickerImageUrl(imageId) {
-  return `/stickers/images/${imageId}`;
+  const base = backendBaseUrl();
+  return base ? `${base}/stickers/images/${imageId}` : `/stickers/images/${imageId}`;
 }
 
 function stickerDownloadUrl(imageId) {
-  return `/stickers/images/${imageId}/download`;
+  const base = backendBaseUrl();
+  return base ? `${base}/stickers/images/${imageId}/download` : `/stickers/images/${imageId}/download`;
 }
 
 function stickerDeliveryMode() {
