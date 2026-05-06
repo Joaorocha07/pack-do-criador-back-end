@@ -50,6 +50,7 @@ function getR2Client() {
   }
 
   const { S3Client } = getR2Commands();
+  const { NodeHttpHandler } = require("@smithy/node-http-handler");
 
   r2Client = new S3Client({
     region: "auto",
@@ -57,7 +58,8 @@ function getR2Client() {
     credentials: {
       accessKeyId,
       secretAccessKey
-    }
+    },
+    requestHandler: new NodeHttpHandler({ maxSockets: 500 })
   });
 
   return r2Client;
