@@ -65,7 +65,10 @@ function getR2Client() {
       maxIdleConnections: 100,
       requestTimeout: 30000,
       socketTimeout: 30000,
-      throwOnRequestTimeout: true
+      throwOnRequestTimeout: true,
+      // Add connection pooling optimizations
+      keepAliveMs: 30000,  // Keep connections alive for 30 seconds
+      keepAlive: true      // Enable TCP keep-alive
     })
   });
 
