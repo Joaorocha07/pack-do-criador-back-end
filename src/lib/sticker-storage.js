@@ -64,7 +64,8 @@ function getR2Client() {
       maxSockets: 500,
       maxIdleConnections: 100,
       requestTimeout: 15000,
-      socketTimeout: 15000
+      socketTimeout: 15000,
+      throwOnRequestTimeout: true
     })
   });
 
