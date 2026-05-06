@@ -1,6 +1,7 @@
 const express = require("express");
 const prisma = require("../lib/prisma");
 const { requireActiveAccess, requireAuth } = require("../middlewares/auth");
+const { logError } = require("../lib/error-logging");
 const {
   getStickerFile,
   publicStickerFileUrl,
@@ -154,38 +155,62 @@ router.get("/categories/:id/images", async (req, res) => {
 });
 
 async function sendImage(req, res, disposition) {
-  const image = await prisma.stickerImage.findUnique({
-    where: { id: req.params.id }
-  });
+  try {
+    const image = await prisma.stickerImage.findUnique({
+      where: { id: req.params.id }
+    });
 
-  if (!image) {
-    return res.status(404).json({ error: "Imagem nao encontrada." });
-  }
-
-  if (shouldRedirectStickerDelivery()) {
-    const publicUrl = publicStickerFileUrl(image.storageKey);
-
-    if (publicUrl) {
-      res.setHeader("Cache-Control", "private, max-age=60");
-      return res.redirect(302, publicUrl);
+    if (!image) {
+      return res.status(404).json({ error: "Imagem nao encontrada." });
     }
+
+    if (shouldRedirectStickerDelivery()) {
+      const publicUrl = publicStickerFileUrl(image.storageKey);
+
+      if (publicUrl) {
+        res.setHeader("Cache-Control", "private, max-age=60");
+        return res.redirect(302, publicUrl);
+      }
+    }
+
+    const storedFile = await getStickerFile(image.storageKey);
+
+    if (!storedFile) {
+      return res.status(404).json({ error: "Arquivo da imagem nao encontrado." });
+    }
+
+    res.setHeader("Content-Type", image.mimeType);
+    res.setHeader("Cache-Control", disposition === "inline" ? "private, max-age=3600" : "private, no-store");
+    res.setHeader("Content-Disposition", safeContentDisposition(disposition, image.originalName));
+
+    if (storedFile.contentLength) {
+      res.setHeader("Content-Length", String(storedFile.contentLength));
+    }
+
+    return storedFile.stream.pipe(res);
+  } catch (error) {
+    if (error.message?.includes("Circuit breaker is OPEN")) {
+      logError("[stickers] Circuit breaker aberto — R2 indisponivel.", error, {
+        imageId: req.params.id,
+        disposition
+      });
+      return res.status(503).json({ error: "Servico temporariamente indisponivel." });
+    }
+
+    if (
+      error.name === "TimeoutError" ||
+      error.code === "TimeoutError" ||
+      error.message?.toLowerCase().includes("timeout")
+    ) {
+      logError("[stickers] Timeout ao buscar imagem no R2.", error, {
+        imageId: req.params.id,
+        disposition
+      });
+      return res.status(504).json({ error: "Timeout ao buscar imagem." });
+    }
+
+    throw error;
   }
-
-  const storedFile = await getStickerFile(image.storageKey);
-
-  if (!storedFile) {
-    return res.status(404).json({ error: "Arquivo da imagem nao encontrado." });
-  }
-
-  res.setHeader("Content-Type", image.mimeType);
-  res.setHeader("Cache-Control", disposition === "inline" ? "private, max-age=3600" : "private, no-store");
-  res.setHeader("Content-Disposition", safeContentDisposition(disposition, image.originalName));
-
-  if (storedFile.contentLength) {
-    res.setHeader("Content-Length", String(storedFile.contentLength));
-  }
-
-  return storedFile.stream.pipe(res);
 }
 
 router.get("/images/:id/download", async (req, res) => {

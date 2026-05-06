@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { r2CircuitBreaker } = require("./r2-resilience");
 
 const ALLOWED_IMAGE_TYPES = {
   png: "image/png",
@@ -59,7 +60,12 @@ function getR2Client() {
       accessKeyId,
       secretAccessKey
     },
-    requestHandler: new NodeHttpHandler({ maxSockets: 500, maxIdleConnections: 100 })
+    requestHandler: new NodeHttpHandler({
+      maxSockets: 500,
+      maxIdleConnections: 100,
+      requestTimeout: 15000,
+      socketTimeout: 15000
+    })
   });
 
   return r2Client;
@@ -168,16 +174,18 @@ async function saveStickerFile({ categoryId, originalName, buffer, extension, mi
   const storageKey = path.posix.join("categories", categoryId, filename);
 
   if (storageDriver() === "r2") {
-    const { PutObjectCommand } = getR2Commands();
+    await r2CircuitBreaker.execute(async () => {
+      const { PutObjectCommand } = getR2Commands();
 
-    await getR2Client().send(
-      new PutObjectCommand({
-        Bucket: r2Bucket(),
-        Key: storageKey,
-        Body: buffer,
-        ContentType: mimeType
-      })
-    );
+      await getR2Client().send(
+        new PutObjectCommand({
+          Bucket: r2Bucket(),
+          Key: storageKey,
+          Body: buffer,
+          ContentType: mimeType
+        })
+      );
+    });
 
     return {
       filename,
@@ -203,20 +211,22 @@ async function saveStickerFile({ categoryId, originalName, buffer, extension, mi
 
 async function getStickerFile(storageKey) {
   if (storageDriver() === "r2") {
-    const { GetObjectCommand } = getR2Commands();
-
     try {
-      const object = await getR2Client().send(
-        new GetObjectCommand({
-          Bucket: r2Bucket(),
-          Key: storageKey
-        })
-      );
+      return await r2CircuitBreaker.execute(async () => {
+        const { GetObjectCommand } = getR2Commands();
 
-      return {
-        stream: object.Body,
-        contentLength: object.ContentLength
-      };
+        const object = await getR2Client().send(
+          new GetObjectCommand({
+            Bucket: r2Bucket(),
+            Key: storageKey
+          })
+        );
+
+        return {
+          stream: object.Body,
+          contentLength: object.ContentLength
+        };
+      });
     } catch (error) {
       if (["NoSuchKey", "NotFound"].includes(error.name)) {
         return null;
@@ -240,14 +250,16 @@ async function getStickerFile(storageKey) {
 
 async function deleteStickerFile(storageKey) {
   if (storageDriver() === "r2") {
-    const { DeleteObjectCommand } = getR2Commands();
+    await r2CircuitBreaker.execute(async () => {
+      const { DeleteObjectCommand } = getR2Commands();
 
-    await getR2Client().send(
-      new DeleteObjectCommand({
-        Bucket: r2Bucket(),
-        Key: storageKey
-      })
-    );
+      await getR2Client().send(
+        new DeleteObjectCommand({
+          Bucket: r2Bucket(),
+          Key: storageKey
+        })
+      );
+    });
     return;
   }
 
