@@ -59,7 +59,7 @@ function getR2Client() {
       accessKeyId,
       secretAccessKey
     },
-    requestHandler: new NodeHttpHandler({ maxSockets: 500 })
+    requestHandler: new NodeHttpHandler({ maxSockets: 500, maxIdleConnections: 100 })
   });
 
   return r2Client;
