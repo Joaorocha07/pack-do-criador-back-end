@@ -60,7 +60,11 @@ app.get("/health", (_req, res) => {
 
 app.get("/health/db", async (_req, res) => {
   try {
-    const [result] = await prisma.$queryRaw`
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Database health check timeout")), 5000)
+    );
+
+    const queryPromise = prisma.$queryRaw`
       SELECT
         to_regclass('public."User"')::text as "userTable",
         to_regclass('public."Purchase"')::text as "purchaseTable",
@@ -69,6 +73,8 @@ app.get("/health/db", async (_req, res) => {
         to_regclass('public."StickerImage"')::text as "stickerImageTable",
         to_regclass('public."StickerCategoryCover"')::text as "stickerCategoryCoverTable"
     `;
+
+    const [result] = await Promise.race([queryPromise, timeoutPromise]);
 
     res.json({
       ok: true,
@@ -92,7 +98,7 @@ app.get("/health/db", async (_req, res) => {
     });
   } catch (error) {
     logError("[health:db] Falha ao verificar banco.", error);
-    res.status(500).json({
+    res.status(503).json({
       ok: false,
       databaseConnected: false,
       message: error.message
