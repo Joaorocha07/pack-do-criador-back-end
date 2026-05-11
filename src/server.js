@@ -107,7 +107,6 @@ app.use("/admin/stickers", requireAuth, requireAdmin, adminStickerRoutes);
 app.use("/stickers", stickerRoutes);
 app.use("/sticker-packs", stickerPackRoutes);
 app.use("/webhooks/cakto", caktoRoutes);
-app.use("/", caktoRoutes);
 
 app.use((error, req, res, next) => {
   logError("[http] Erro nao tratado na rota.", error, {
