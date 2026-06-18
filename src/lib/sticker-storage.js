@@ -63,8 +63,8 @@ function getR2Client() {
     requestHandler: new NodeHttpHandler({
       maxSockets: 500,
       maxIdleConnections: 100,
-      requestTimeout: 30000,
-      socketTimeout: 30000,
+      requestTimeout: 90000,
+      socketTimeout: 90000,
       throwOnRequestTimeout: true
     })
   });
