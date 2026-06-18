@@ -168,7 +168,7 @@ async function sendImage(req, res, disposition) {
       const publicUrl = publicStickerFileUrl(image.storageKey);
 
       if (publicUrl) {
-        res.setHeader("Cache-Control", "private, max-age=60");
+        res.setHeader("Cache-Control", "public, max-age=86400");
         return res.redirect(302, publicUrl);
       }
     }
